@@ -1,0 +1,59 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Helper functions for secure authentication checks
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    // Root user document (Profile & Preferences)
+    match /users/{userId} {
+      allow read, write: if isOwner(userId);
+
+      // Wallets subcollection (GPay, Bank, Cash, etc.)
+      match /wallets/{walletId} {
+        allow read, write: if isOwner(userId);
+      }
+
+      // Unified transactions subcollection (Expenses, Incomes, Transfers, Lend, Borrow)
+      match /transactions/{transactionId} {
+        allow read, write: if isOwner(userId);
+      }
+
+      // People & Lending/Borrowing directory
+      match /people/{personId} {
+        allow read, write: if isOwner(userId);
+      }
+
+      // Budgets subcollection
+      match /budgets/{budgetId} {
+        allow read, write: if isOwner(userId);
+      }
+
+      // Recurring payments and EMIs
+      match /recurring/{recurringId} {
+        allow read, write: if isOwner(userId);
+      }
+
+      // In-app notifications
+      match /notifications/{notificationId} {
+        allow read, write: if isOwner(userId);
+      }
+
+      // Custom settings & preferences
+      match /settings/{settingsId} {
+        allow read, write: if isOwner(userId);
+      }
+    }
+
+    // Deny all other unmapped document access
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
