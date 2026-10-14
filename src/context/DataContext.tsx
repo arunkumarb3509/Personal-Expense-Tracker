@@ -26,7 +26,10 @@ import {
   markNotificationAsRead as markNotificationReadService,
   addAppNotification,
 } from '@/services/firestoreService';
-import { calculateFinancialSummary } from '@/services/balanceCalculator';
+import {
+  calculateFinancialSummary,
+  calculateGPayMetrics,
+} from '@/services/balanceCalculator';
 import { format } from 'date-fns';
 
 interface DataContextType {
@@ -44,8 +47,29 @@ interface DataContextType {
   totalReceivable: number;
   totalPayable: number;
   netWorth: number;
+  gpayWallet: Wallet | null;
+  gpayBalance: number;
+  cashWallet: Wallet | null;
+  cashBalance: number;
+  savingsBalance: number;
+  totalLiquidBalance: number;
+  todayGPaySpend: number;
+  monthlyGPaySpend: number;
+  recentGPayTransactions: Transaction[];
 
   // Actions
+  reconcileGPayBalance: (
+    actualBalance: number,
+    createAdjustmentTx: boolean,
+    notes?: string
+  ) => Promise<{ diff: number }>;
+  setStartingGPayBalance: (startingBalance: number) => Promise<void>;
+  recordSavingsContribution: (
+    fromWalletId: string,
+    savingsWalletId: string,
+    amount: number,
+    notes?: string
+  ) => Promise<Transaction>;
   createTransaction: (data: {
     amount: number;
     type: TransactionType;
@@ -77,6 +101,7 @@ interface DataContextType {
     icon?: string;
     accountNumberLast4?: string;
     isDefault?: boolean;
+    isPrimaryGPay?: boolean;
   }) => Promise<Wallet>;
   editWallet: (walletId: string, updates: Partial<Wallet>) => Promise<void>;
   removeWallet: (walletId: string) => Promise<void>;
@@ -213,16 +238,113 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     };
   }, [isAuthenticated, uid, currentMonthStr]);
 
-  // Compute Financial Summary
-  const { totalWalletBalance, totalReceivable, totalPayable, netWorth } = useMemo(() => {
+  // Compute Financial Summary & GPay/Cash/Savings metrics
+  const financialSummary = useMemo(() => {
     return calculateFinancialSummary(wallets, people);
   }, [wallets, people]);
+
+  const {
+    gpayWallet,
+    gpayBalance,
+    cashWallet,
+    cashBalance,
+    savingsBalance,
+    totalLiquidBalance,
+    totalWalletBalance,
+    totalReceivable,
+    totalPayable,
+    netWorth,
+  } = financialSummary;
+
+  const todayStr = useMemo(() => format(new Date(), 'yyyy-MM-dd'), []);
+
+  const { todaySpending: todayGPaySpend, monthlySpending: monthlyGPaySpend, recentGPayTransactions } = useMemo(() => {
+    return calculateGPayMetrics(transactions, gpayWallet?.id || null, todayStr, currentMonthStr);
+  }, [transactions, gpayWallet?.id, todayStr, currentMonthStr]);
 
   const unreadNotificationCount = useMemo(() => {
     return notifications.filter((n) => !n.isRead).length;
   }, [notifications]);
 
   // Actions
+  const reconcileGPayBalance = async (
+    actualBalance: number,
+    createAdjustmentTx: boolean = false,
+    notes?: string
+  ): Promise<{ diff: number }> => {
+    if (!uid) throw new Error('User not authenticated');
+    if (!gpayWallet) throw new Error('No Google Pay (GPay) wallet found to reconcile');
+
+    const verifiedActual = Number(actualBalance) || 0;
+    const diff = Number((verifiedActual - (gpayWallet.currentBalance || 0)).toFixed(2));
+    const now = Date.now();
+
+    if (createAdjustmentTx && Math.abs(diff) > 0.01) {
+      const isPositive = diff > 0;
+      await addTransactionService(uid, {
+        amount: Math.abs(diff),
+        type: isPositive ? 'income' : 'expense',
+        categoryId: 'reconciliation',
+        categoryName: 'GPay Reconciliation',
+        walletId: gpayWallet.id,
+        walletName: gpayWallet.name,
+        date: format(new Date(), 'yyyy-MM-dd'),
+        time: format(new Date(), 'HH:mm'),
+        description: `GPay Balance Manual Reconciliation Adjustment (${diff > 0 ? '+' : ''}${diff})`,
+        notes: notes || 'Manual balance reconciliation against Google Pay app',
+      });
+    }
+
+    // Update wallet reconciliation metadata
+    await updateWalletService(uid, gpayWallet.id, {
+      lastReconciledAt: now,
+      reconciliationDiff: createAdjustmentTx ? 0 : diff,
+      lastVerifiedActualBalance: verifiedActual,
+    });
+
+    return { diff };
+  };
+
+  const setStartingGPayBalance = async (startingBalance: number) => {
+    if (!uid) throw new Error('User not authenticated');
+    if (!gpayWallet) throw new Error('No Google Pay (GPay) wallet found');
+    const numeric = Number(startingBalance) || 0;
+    const diff = numeric - (gpayWallet.openingBalance || 0);
+
+    await updateWalletService(uid, gpayWallet.id, {
+      openingBalance: numeric,
+      currentBalance: (gpayWallet.currentBalance || 0) + diff,
+      lastReconciledAt: Date.now(),
+      lastVerifiedActualBalance: numeric,
+      reconciliationDiff: 0,
+    });
+  };
+
+  const recordSavingsContribution = async (
+    fromWalletId: string,
+    savingsWalletId: string,
+    amount: number,
+    notes?: string
+  ) => {
+    if (!uid) throw new Error('User not authenticated');
+    const fromW = wallets.find((w) => w.id === fromWalletId);
+    const toW = wallets.find((w) => w.id === savingsWalletId);
+
+    return await addTransactionService(uid, {
+      amount,
+      type: 'transfer',
+      categoryId: 'savings',
+      categoryName: 'Savings Vault',
+      walletId: fromWalletId,
+      walletName: fromW?.name || 'Wallet',
+      targetWalletId: savingsWalletId,
+      targetWalletName: toW?.name || 'Savings Vault',
+      date: format(new Date(), 'yyyy-MM-dd'),
+      description: `Savings: ${fromW?.name || 'Wallet'} → ${toW?.name || 'Savings Vault'}`,
+      notes: notes || 'Personal savings transfer (not counted as expense)',
+    });
+  };
+
   const createTransaction = async (data: any) => {
     if (!uid) throw new Error('User not authenticated');
     return await addTransactionService(uid, data);
@@ -418,6 +540,18 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         totalReceivable,
         totalPayable,
         netWorth,
+        gpayWallet,
+        gpayBalance,
+        cashWallet,
+        cashBalance,
+        savingsBalance,
+        totalLiquidBalance,
+        todayGPaySpend,
+        monthlyGPaySpend,
+        recentGPayTransactions,
+        reconcileGPayBalance,
+        setStartingGPayBalance,
+        recordSavingsContribution,
         createTransaction,
         editTransaction,
         removeTransaction,

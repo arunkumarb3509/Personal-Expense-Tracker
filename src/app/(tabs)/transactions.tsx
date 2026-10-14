@@ -273,7 +273,7 @@ export default function TransactionsScreen() {
           data={groupedData}
           keyExtractor={(group) => group.rawDate}
           showsVerticalScrollIndicator={false}
-          contentContainerStyle={{ paddingBottom: 32 }}
+          contentContainerStyle={{ paddingBottom: 110 }}
           renderItem={({ item: group }) => (
             <View style={{ marginBottom: spacing.md }}>
               {/* Date Group Header */}

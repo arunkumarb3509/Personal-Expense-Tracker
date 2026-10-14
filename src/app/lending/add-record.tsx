@@ -13,6 +13,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme } from '@/context/ThemeContext';
 import { useData } from '@/context/DataContext';
 import { useCurrency } from '@/hooks/useCurrency';
+import { useToast } from '@/context/ToastContext';
 import { useRouter } from 'expo-router';
 import { Button } from '@/components/common/Button';
 import { TextInput, AmountInput } from '@/components/common/Input';
@@ -28,6 +29,7 @@ export default function AddLendingRecordModal() {
   const { colors, typography, radius, spacing } = useTheme();
   const { wallets, people, createPerson, recordLending, recordBorrowing } = useData();
   const { currencySymbol } = useCurrency();
+  const { showToast } = useToast();
   const router = useRouter();
 
   const [type, setType] = useState<'given' | 'borrowed'>('given');
@@ -71,7 +73,7 @@ export default function AddLendingRecordModal() {
     }
 
     if (!selectedWalletId) {
-      Alert.alert('Wallet required', 'Please select a wallet.');
+      showToast('Please select a payment wallet.', 'warning');
       return;
     }
 
@@ -117,9 +119,16 @@ export default function AddLendingRecordModal() {
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       } catch {}
 
+      showToast(
+        type === 'given'
+          ? `Money given to ${person.name} (${currencySymbol}${numericAmount}) recorded!`
+          : `Money borrowed from ${person.name} (${currencySymbol}${numericAmount}) recorded!`,
+        'success'
+      );
+
       router.back();
     } catch (err: any) {
-      Alert.alert('Error', err.message || 'Failed to save record.');
+      showToast(err.message || 'Failed to save record.', 'error');
     } finally {
       setLoading(false);
     }

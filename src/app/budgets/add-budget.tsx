@@ -12,6 +12,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme } from '@/context/ThemeContext';
 import { useData } from '@/context/DataContext';
 import { useCurrency } from '@/hooks/useCurrency';
+import { useToast } from '@/context/ToastContext';
 import { useRouter } from 'expo-router';
 import { Button } from '@/components/common/Button';
 import { AmountInput } from '@/components/common/Input';
@@ -26,7 +27,8 @@ import * as Haptics from 'expo-haptics';
 export default function AddBudgetModal() {
   const { colors, typography, radius, spacing } = useTheme();
   const { saveBudget } = useData();
-  const { currencySymbol } = useCurrency();
+  const { currencySymbol, format: formatMoney } = useCurrency();
+  const { showToast } = useToast();
   const router = useRouter();
 
   const [selectedCategory, setSelectedCategory] = useState<Category>(EXPENSE_CATEGORIES[0]);
@@ -53,9 +55,10 @@ export default function AddBudgetModal() {
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       } catch {}
 
+      showToast(`Monthly budget for ${selectedCategory.name} saved!`, 'success');
       router.back();
     } catch (err: any) {
-      Alert.alert('Error', err.message || 'Failed to save budget.');
+      showToast(err.message || 'Failed to save budget.', 'error');
     } finally {
       setLoading(false);
     }

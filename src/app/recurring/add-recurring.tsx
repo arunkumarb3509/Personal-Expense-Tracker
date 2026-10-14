@@ -12,6 +12,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme } from '@/context/ThemeContext';
 import { useData } from '@/context/DataContext';
 import { useCurrency } from '@/hooks/useCurrency';
+import { useToast } from '@/context/ToastContext';
 import { useRouter } from 'expo-router';
 import { Button } from '@/components/common/Button';
 import { TextInput, AmountInput } from '@/components/common/Input';
@@ -31,6 +32,7 @@ export default function AddRecurringModal() {
   const { colors, typography, radius, spacing } = useTheme();
   const { wallets, createRecurringPayment } = useData();
   const { currencySymbol } = useCurrency();
+  const { showToast } = useToast();
   const router = useRouter();
 
   const [name, setName] = useState('');
@@ -86,9 +88,10 @@ export default function AddRecurringModal() {
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       } catch {}
 
+      showToast(`Recurring payment "${name.trim()}" created!`, 'success');
       router.back();
     } catch (err: any) {
-      Alert.alert('Error', err.message || 'Failed to save recurring payment.');
+      showToast(err.message || 'Failed to save recurring payment.', 'error');
     } finally {
       setLoading(false);
     }

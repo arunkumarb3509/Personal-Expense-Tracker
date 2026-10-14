@@ -69,6 +69,7 @@ export const DEFAULT_WALLETS = [
     color: '#00BAF2',
     icon: 'Smartphone',
     isDefault: true,
+    isPrimaryGPay: true,
   },
   {
     name: 'Bank',
@@ -86,6 +87,15 @@ export const DEFAULT_WALLETS = [
     currentBalance: 0,
     color: '#10B981',
     icon: 'Banknote',
+    isDefault: false,
+  },
+  {
+    name: 'Savings Vault',
+    type: 'savings' as WalletType,
+    openingBalance: 0,
+    currentBalance: 0,
+    color: '#F59E0B',
+    icon: 'PiggyBank',
     isDefault: false,
   },
 ];

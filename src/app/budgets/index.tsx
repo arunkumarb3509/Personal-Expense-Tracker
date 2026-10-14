@@ -11,6 +11,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme } from '@/context/ThemeContext';
 import { useData } from '@/context/DataContext';
 import { useCurrency } from '@/hooks/useCurrency';
+import { useToast } from '@/context/ToastContext';
 import { useRouter } from 'expo-router';
 import { Header } from '@/components/common/Header';
 import { BudgetProgressCard } from '@/components/budgets/BudgetProgressCard';
@@ -24,6 +25,7 @@ export default function BudgetsScreen() {
   const { colors, typography, radius, spacing, shadows } = useTheme();
   const { budgets, transactions, removeBudget } = useData();
   const { format: formatMoney } = useCurrency();
+  const { showToast } = useToast();
   const router = useRouter();
 
   const currentMonthStr = format(new Date(), 'yyyy-MM');
@@ -78,8 +80,9 @@ export default function BudgetsScreen() {
         onPress: async () => {
           try {
             await removeBudget(budgetId);
+            showToast('Budget deleted successfully.', 'info');
           } catch (e: any) {
-            Alert.alert('Error', e.message);
+            showToast(e.message || 'Failed to delete budget.', 'error');
           }
         },
       },

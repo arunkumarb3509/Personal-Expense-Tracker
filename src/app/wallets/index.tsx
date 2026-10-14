@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   View,
   Text,
@@ -15,6 +15,8 @@ import { Header } from '@/components/common/Header';
 import { Card } from '@/components/common/Card';
 import { Button } from '@/components/common/Button';
 import { EmptyState } from '@/components/common/EmptyState';
+import { ReconcileGPayModal } from '@/components/dashboard/ReconcileGPayModal';
+import { SetGPayBalanceModal } from '@/components/dashboard/SetGPayBalanceModal';
 import {
   Smartphone,
   Building2,
@@ -25,13 +27,17 @@ import {
   Plus,
   ArrowLeftRight,
   ShieldCheck,
+  CheckCircle2,
 } from 'lucide-react-native';
 
 export default function WalletsListScreen() {
   const { colors, typography, radius, spacing, shadows } = useTheme();
-  const { wallets, totalWalletBalance } = useData();
+  const { wallets, totalWalletBalance, gpayWallet } = useData();
   const { format } = useCurrency();
   const router = useRouter();
+
+  const [showReconcileModal, setShowReconcileModal] = useState(false);
+  const [showSetBalanceModal, setShowSetBalanceModal] = useState(false);
 
   const getWalletIcon = (type: string, color: string) => {
     const size = 22;
@@ -169,7 +175,28 @@ export default function WalletsListScreen() {
                           >
                             {wallet.name}
                           </Text>
-                          {wallet.isDefault && (
+                          {(wallet.isPrimaryGPay || wallet.name.toLowerCase().includes('gpay')) && (
+                            <View
+                              style={[
+                                styles.defaultPill,
+                                {
+                                  backgroundColor: colors.lime,
+                                  marginLeft: 6,
+                                },
+                              ]}
+                            >
+                              <Text
+                                style={{
+                                  color: '#0B291F',
+                                  fontSize: typography.sizes.xxs,
+                                  fontWeight: '800',
+                                }}
+                              >
+                                GPAY PRIMARY
+                              </Text>
+                            </View>
+                          )}
+                          {wallet.isDefault && !(wallet.isPrimaryGPay || wallet.name.toLowerCase().includes('gpay')) && (
                             <View
                               style={[
                                 styles.defaultPill,
@@ -183,7 +210,7 @@ export default function WalletsListScreen() {
                                 style={{
                                   color: colors.primary,
                                   fontSize: typography.sizes.xxs,
-                                  fontWeight: typography.weights.bold,
+                                  fontWeight: '700',
                                 }}
                               >
                                 DEFAULT
@@ -201,6 +228,7 @@ export default function WalletsListScreen() {
                           }}
                         >
                           {wallet.type.replace('_', ' ')} Account
+                          {wallet.lastReconciledAt ? ` • Verified` : ''}
                         </Text>
                       </View>
                     </View>
@@ -226,6 +254,101 @@ export default function WalletsListScreen() {
                       </Text>
                     </View>
                   </View>
+
+                  {(wallet.isPrimaryGPay || wallet.name.toLowerCase().includes('gpay')) && (
+                    <View
+                      style={{
+                        marginTop: spacing.md,
+                        paddingTop: spacing.sm,
+                        borderTopWidth: 1,
+                        borderTopColor: colors.border,
+                        flexDirection: 'row',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                      }}
+                    >
+                      <View style={{ flex: 1, marginRight: 8 }}>
+                        {wallet.lastReconciledAt ? (
+                          <Text
+                            style={{
+                              color: colors.textSecondary,
+                              fontSize: typography.sizes.xxs,
+                            }}
+                          >
+                            Verified {wallet.lastReconciledAt}
+                            {wallet.reconciliationDiff !== undefined && (
+                              <Text
+                                style={{
+                                  color:
+                                    wallet.reconciliationDiff === 0
+                                      ? colors.income
+                                      : colors.warning,
+                                  fontWeight: '700',
+                                }}
+                              >
+                                {` • Diff: ${format(wallet.reconciliationDiff)}`}
+                              </Text>
+                            )}
+                          </Text>
+                        ) : (
+                          <Text
+                            style={{
+                              color: colors.textTertiary,
+                              fontSize: typography.sizes.xxs,
+                            }}
+                          >
+                            Manual reconciliation available
+                          </Text>
+                        )}
+                      </View>
+
+                      <View style={{ flexDirection: 'row', gap: 6 }}>
+                        <TouchableOpacity
+                          activeOpacity={0.7}
+                          onPress={() => setShowSetBalanceModal(true)}
+                          style={{
+                            paddingHorizontal: 10,
+                            paddingVertical: 5,
+                            borderRadius: radius.md,
+                            backgroundColor: colors.surfaceSecondary,
+                            borderWidth: 1,
+                            borderColor: colors.border,
+                          }}
+                        >
+                          <Text
+                            style={{
+                              color: colors.textSecondary,
+                              fontSize: typography.sizes.xxs,
+                              fontWeight: '700',
+                            }}
+                          >
+                            Set Balance
+                          </Text>
+                        </TouchableOpacity>
+
+                        <TouchableOpacity
+                          activeOpacity={0.7}
+                          onPress={() => setShowReconcileModal(true)}
+                          style={{
+                            paddingHorizontal: 10,
+                            paddingVertical: 5,
+                            borderRadius: radius.md,
+                            backgroundColor: colors.primary,
+                          }}
+                        >
+                          <Text
+                            style={{
+                              color: '#FFFFFF',
+                              fontSize: typography.sizes.xxs,
+                              fontWeight: '700',
+                            }}
+                          >
+                            Reconcile
+                          </Text>
+                        </TouchableOpacity>
+                      </View>
+                    </View>
+                  )}
                 </Card>
               );
             })
@@ -240,6 +363,26 @@ export default function WalletsListScreen() {
           )}
         </View>
       </ScrollView>
+
+      {/* Reconcile GPay Modal */}
+      {gpayWallet && (
+        <ReconcileGPayModal
+          visible={showReconcileModal}
+          onClose={() => setShowReconcileModal(false)}
+          currentAppBalance={gpayWallet.currentBalance}
+          walletId={gpayWallet.id}
+        />
+      )}
+
+      {/* Set Starting Balance Modal */}
+      {gpayWallet && (
+        <SetGPayBalanceModal
+          visible={showSetBalanceModal}
+          onClose={() => setShowSetBalanceModal(false)}
+          currentBalance={gpayWallet.currentBalance}
+          walletId={gpayWallet.id}
+        />
+      )}
     </SafeAreaView>
   );
 }

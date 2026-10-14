@@ -13,6 +13,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme } from '@/context/ThemeContext';
 import { useData } from '@/context/DataContext';
 import { useCurrency } from '@/hooks/useCurrency';
+import { useToast } from '@/context/ToastContext';
 import { useRouter } from 'expo-router';
 import { Button } from '@/components/common/Button';
 import { TextInput, AmountInput } from '@/components/common/Input';
@@ -34,6 +35,7 @@ export default function AddWalletModal() {
   const { colors, typography, radius, spacing } = useTheme();
   const { createWallet } = useData();
   const { currencyCode, currencySymbol } = useCurrency();
+  const { showToast } = useToast();
   const router = useRouter();
 
   const [selectedType, setSelectedType] = useState<WalletType>('bank');
@@ -97,9 +99,10 @@ export default function AddWalletModal() {
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       } catch {}
 
+      showToast(`Wallet "${walletName.trim()}" created successfully!`, 'success');
       router.back();
     } catch (err: any) {
-      Alert.alert('Error', err.message || 'Failed to create wallet.');
+      showToast(err.message || 'Failed to create wallet.', 'error');
     } finally {
       setLoading(false);
     }

@@ -11,6 +11,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme } from '@/context/ThemeContext';
 import { useData } from '@/context/DataContext';
 import { useCurrency } from '@/hooks/useCurrency';
+import { useToast } from '@/context/ToastContext';
 import { useRouter } from 'expo-router';
 import { Header } from '@/components/common/Header';
 import { Card } from '@/components/common/Card';
@@ -34,6 +35,7 @@ export default function ExportDataScreen() {
   const { colors, typography, radius, spacing, shadows } = useTheme();
   const { transactions, wallets, people } = useData();
   const { currencyCode } = useCurrency();
+  const { showToast } = useToast();
   const router = useRouter();
 
   const [exportingTx, setExportingTx] = useState(false);
@@ -41,7 +43,7 @@ export default function ExportDataScreen() {
 
   const handleExportTransactions = async () => {
     if (transactions.length === 0) {
-      Alert.alert('No Data', 'You have no transactions to export yet.');
+      showToast('You have no transactions to export yet.', 'warning');
       return;
     }
 
@@ -51,8 +53,9 @@ export default function ExportDataScreen() {
       try {
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       } catch {}
+      showToast('Transactions exported successfully!', 'success');
     } catch (err: any) {
-      Alert.alert('Export Failed', err.message || 'Could not export transactions.');
+      showToast(err.message || 'Could not export transactions.', 'error');
     } finally {
       setExportingTx(false);
     }
@@ -60,7 +63,7 @@ export default function ExportDataScreen() {
 
   const handleExportLending = async () => {
     if (people.length === 0) {
-      Alert.alert('No Data', 'You have no lending or borrowing records to export.');
+      showToast('You have no lending or borrowing records to export.', 'warning');
       return;
     }
 
@@ -70,8 +73,9 @@ export default function ExportDataScreen() {
       try {
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       } catch {}
+      showToast('Settlement records exported successfully!', 'success');
     } catch (err: any) {
-      Alert.alert('Export Failed', err.message || 'Could not export debt records.');
+      showToast(err.message || 'Could not export debt records.', 'error');
     } finally {
       setExportingDebt(false);
     }

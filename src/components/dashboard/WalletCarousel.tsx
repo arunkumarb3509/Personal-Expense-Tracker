@@ -113,7 +113,26 @@ export function WalletCarousel({ wallets }: WalletCarouselProps) {
                 >
                   {getWalletIcon(wallet.type, wColor)}
                 </View>
-                {wallet.isDefault && (
+                {(wallet.isPrimaryGPay || wallet.name.toLowerCase().includes('gpay')) ? (
+                  <View
+                    style={[
+                      styles.defaultBadge,
+                      {
+                        backgroundColor: colors.lime,
+                      },
+                    ]}
+                  >
+                    <Text
+                      style={{
+                        color: '#0B291F',
+                        fontSize: typography.sizes.xxs,
+                        fontWeight: '800',
+                      }}
+                    >
+                      GPAY
+                    </Text>
+                  </View>
+                ) : wallet.isDefault ? (
                   <View
                     style={[
                       styles.defaultBadge,
@@ -126,13 +145,13 @@ export function WalletCarousel({ wallets }: WalletCarouselProps) {
                       style={{
                         color: colors.primary,
                         fontSize: typography.sizes.xxs,
-                        fontWeight: typography.weights.bold,
+                        fontWeight: '700',
                       }}
                     >
                       MAIN
                     </Text>
                   </View>
-                )}
+                ) : null}
               </View>
 
               <Text

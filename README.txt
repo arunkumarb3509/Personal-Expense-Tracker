@@ -130,3 +130,8 @@ contacts.
    - Needed comprehensive error handling and user feedback across all forms and quick actions.
 
 ================================================================================
+Build the Android App:
+ 1.npm install -g eas-cli
+ 2.eas login
+ 3.eas build:configure
+ 4.eas build --platform android --profile preview

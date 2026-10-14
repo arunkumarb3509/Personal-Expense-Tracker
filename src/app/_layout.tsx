@@ -4,6 +4,7 @@ import { StatusBar } from 'expo-status-bar';
 import { ThemeProvider, useTheme } from '@/context/ThemeContext';
 import { AuthProvider, useAuth } from '@/context/AuthContext';
 import { DataProvider } from '@/context/DataContext';
+import { ToastProvider } from '@/context/ToastContext';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 function RootLayoutContent() {
@@ -81,7 +82,9 @@ export default function RootLayout() {
       <ThemeProvider>
         <AuthProvider>
           <DataProvider>
-            <RootLayoutContent />
+            <ToastProvider>
+              <RootLayoutContent />
+            </ToastProvider>
           </DataProvider>
         </AuthProvider>
       </ThemeProvider>

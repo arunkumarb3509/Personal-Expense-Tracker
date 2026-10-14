@@ -13,6 +13,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme } from '@/context/ThemeContext';
 import { useData } from '@/context/DataContext';
 import { useCurrency } from '@/hooks/useCurrency';
+import { useToast } from '@/context/ToastContext';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Header } from '@/components/common/Header';
 import { Avatar } from '@/components/common/Avatar';
@@ -41,6 +42,7 @@ export default function PersonDetailScreen() {
   const { colors, typography, radius, spacing, shadows } = useTheme();
   const { people, transactions, wallets, recordRepayment, removePerson } = useData();
   const { currencySymbol, format: formatMoney } = useCurrency();
+  const { showToast } = useToast();
   const router = useRouter();
   const { personId, autoOpenRepay } = useLocalSearchParams<{
     personId: string;
@@ -113,7 +115,7 @@ export default function PersonDetailScreen() {
     }
 
     if (!selectedWalletId) {
-      Alert.alert('Wallet required', 'Please select a payment wallet.');
+      showToast('Please select a payment wallet.', 'warning');
       return;
     }
 
@@ -133,11 +135,12 @@ export default function PersonDetailScreen() {
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       } catch {}
 
+      showToast(`Repayment of ${formatMoney(numeric)} recorded successfully!`, 'success');
       setShowRepayModal(false);
       setRepayAmount('');
       setRepayNotes('');
     } catch (err: any) {
-      Alert.alert('Error', err.message || 'Failed to record repayment.');
+      showToast(err.message || 'Failed to record repayment.', 'error');
     } finally {
       setLoading(false);
     }
@@ -148,9 +151,10 @@ export default function PersonDetailScreen() {
       setDeleteLoading(true);
       await removePerson(person.id);
       setShowDeleteModal(false);
+      showToast(`${person.name} deleted.`, 'info');
       router.back();
     } catch (err: any) {
-      Alert.alert('Error', err.message || 'Failed to delete person.');
+      showToast(err.message || 'Failed to delete person.', 'error');
     } finally {
       setDeleteLoading(false);
     }

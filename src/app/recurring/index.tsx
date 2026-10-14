@@ -11,6 +11,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme } from '@/context/ThemeContext';
 import { useData } from '@/context/DataContext';
 import { useCurrency } from '@/hooks/useCurrency';
+import { useToast } from '@/context/ToastContext';
 import { useRouter } from 'expo-router';
 import { Header } from '@/components/common/Header';
 import { Card } from '@/components/common/Card';
@@ -31,6 +32,7 @@ export default function RecurringTransactionsScreen() {
   const { colors, typography, radius, spacing } = useTheme();
   const { recurring, removeRecurringPayment, createTransaction } = useData();
   const { format } = useCurrency();
+  const { showToast } = useToast();
   const router = useRouter();
 
   const handleDelete = (id: string, name: string) => {
@@ -42,8 +44,9 @@ export default function RecurringTransactionsScreen() {
         onPress: async () => {
           try {
             await removeRecurringPayment(id);
+            showToast(`Stopped tracking "${name}".`, 'info');
           } catch (e: any) {
-            Alert.alert('Error', e.message);
+            showToast(e.message || 'Failed to delete recurring payment.', 'error');
           }
         },
       },
@@ -70,9 +73,9 @@ export default function RecurringTransactionsScreen() {
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       } catch {}
 
-      Alert.alert('Success', `Logged payment of ${format(item.amount)} for "${item.name}".`);
+      showToast(`Logged payment of ${format(item.amount)} for "${item.name}".`, 'success');
     } catch (e: any) {
-      Alert.alert('Error', e.message);
+      showToast(e.message || 'Failed to process recurring payment.', 'error');
     }
   };
 

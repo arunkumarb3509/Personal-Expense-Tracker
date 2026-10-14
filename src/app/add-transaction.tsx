@@ -13,6 +13,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme } from '@/context/ThemeContext';
 import { useData } from '@/context/DataContext';
 import { useCurrency } from '@/hooks/useCurrency';
+import { useToast } from '@/context/ToastContext';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Button } from '@/components/common/Button';
 import { TextInput, AmountInput } from '@/components/common/Input';
@@ -31,6 +32,7 @@ export default function AddTransactionModal() {
   const { colors, typography, radius, spacing } = useTheme();
   const { wallets, createTransaction } = useData();
   const { currencySymbol } = useCurrency();
+  const { showToast } = useToast();
   const router = useRouter();
   const params = useLocalSearchParams<{ type?: string }>();
 
@@ -132,9 +134,16 @@ export default function AddTransactionModal() {
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       } catch {}
 
+      showToast(
+        type === 'expense'
+          ? `Expense of ${currencySymbol}${numericAmount} saved successfully!`
+          : `Income of ${currencySymbol}${numericAmount} saved successfully!`,
+        'success'
+      );
+
       router.back();
     } catch (err: any) {
-      Alert.alert('Error', err.message || 'Failed to save transaction.');
+      showToast(err.message || 'Failed to save transaction.', 'error');
     } finally {
       setLoading(false);
     }

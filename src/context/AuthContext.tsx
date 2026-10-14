@@ -10,6 +10,8 @@ import {
   checkEmailVerification,
   sendPasswordReset,
   updateUserProfile as updateProfileService,
+  uploadProfilePhoto as uploadProfilePhotoService,
+  removeProfilePhoto as removeProfilePhotoService,
   getFriendlyAuthErrorMessage,
 } from '@/services/authService';
 import { UserProfile, ThemeMode } from '@/types/auth';
@@ -27,7 +29,9 @@ interface AuthContextType {
   resendVerification: () => Promise<void>;
   refreshVerificationStatus: () => Promise<boolean>;
   resetPassword: (email: string) => Promise<void>;
-  updateProfile: (displayName: string, currency?: string, themeMode?: ThemeMode) => Promise<void>;
+  updateProfile: (displayName: string, currency?: string, themeMode?: ThemeMode, photoURL?: string | null) => Promise<void>;
+  updatePhoto: (imageUri: string, base64Data?: string | null) => Promise<string>;
+  deletePhoto: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -165,15 +169,52 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  const updateProfile = async (displayName: string, currency?: string, themeMode?: ThemeMode) => {
+  const updateProfile = async (
+    displayName: string,
+    currency?: string,
+    themeMode?: ThemeMode,
+    photoURL?: string | null
+  ) => {
     try {
-      await updateProfileService(displayName, currency, themeMode);
+      await updateProfileService(displayName, currency, themeMode, photoURL);
       if (user) {
         setUser({
           ...user,
           displayName,
           currency: currency || user.currency,
           themeMode: themeMode || user.themeMode,
+          photoURL: photoURL !== undefined ? photoURL : user.photoURL,
+        });
+      }
+    } catch (err: any) {
+      throw new Error(getFriendlyAuthErrorMessage(err));
+    }
+  };
+
+  const updatePhoto = async (imageUri: string, base64Data?: string | null): Promise<string> => {
+    if (!firebaseUser) throw new Error('Not authenticated');
+    try {
+      const url = await uploadProfilePhotoService(firebaseUser.uid, imageUri, base64Data);
+      if (user) {
+        setUser({
+          ...user,
+          photoURL: url,
+        });
+      }
+      return url;
+    } catch (err: any) {
+      throw new Error(getFriendlyAuthErrorMessage(err));
+    }
+  };
+
+  const deletePhoto = async (): Promise<void> => {
+    if (!firebaseUser) throw new Error('Not authenticated');
+    try {
+      await removeProfilePhotoService(firebaseUser.uid);
+      if (user) {
+        setUser({
+          ...user,
+          photoURL: null,
         });
       }
     } catch (err: any) {
@@ -199,6 +240,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         refreshVerificationStatus,
         resetPassword,
         updateProfile,
+        updatePhoto,
+        deletePhoto,
       }}
     >
       {children}

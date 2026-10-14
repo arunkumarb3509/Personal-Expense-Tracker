@@ -12,6 +12,10 @@ export interface Wallet {
   icon?: string;
   accountNumberLast4?: string;
   isDefault?: boolean;
+  isPrimaryGPay?: boolean;
+  lastReconciledAt?: number;
+  reconciliationDiff?: number;
+  lastVerifiedActualBalance?: number;
   createdAt: number;
   updatedAt: number;
 }

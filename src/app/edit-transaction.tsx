@@ -13,6 +13,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme } from '@/context/ThemeContext';
 import { useData } from '@/context/DataContext';
 import { useCurrency } from '@/hooks/useCurrency';
+import { useToast } from '@/context/ToastContext';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Button } from '@/components/common/Button';
 import { TextInput, AmountInput } from '@/components/common/Input';
@@ -30,6 +31,7 @@ export default function EditTransactionModal() {
   const { colors, typography, radius, spacing } = useTheme();
   const { transactions, wallets, editTransaction, removeTransaction } = useData();
   const { currencySymbol } = useCurrency();
+  const { showToast } = useToast();
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
 
@@ -115,9 +117,10 @@ export default function EditTransactionModal() {
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       } catch {}
 
+      showToast('Transaction updated successfully!', 'success');
       router.back();
     } catch (err: any) {
-      Alert.alert('Error', err.message || 'Failed to update transaction.');
+      showToast(err.message || 'Failed to update transaction.', 'error');
     } finally {
       setLoading(false);
     }
@@ -131,9 +134,10 @@ export default function EditTransactionModal() {
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
       } catch {}
       setShowDeleteModal(false);
+      showToast('Transaction deleted.', 'info');
       router.back();
     } catch (err: any) {
-      Alert.alert('Error', err.message || 'Failed to delete transaction.');
+      showToast(err.message || 'Failed to delete transaction.', 'error');
     } finally {
       setDeleteLoading(false);
     }

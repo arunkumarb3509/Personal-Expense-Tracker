@@ -287,23 +287,88 @@ export async function logoutUser(): Promise<void> {
 export async function updateUserProfile(
   displayName: string,
   currency?: string,
-  themeMode?: ThemeMode
+  themeMode?: ThemeMode,
+  photoURL?: string | null
 ): Promise<void> {
   if (!auth.currentUser) {
     throw new Error('Not authenticated');
   }
   const uid = auth.currentUser.uid;
+  const authUpdates: any = {};
   if (displayName && auth.currentUser.displayName !== displayName) {
-    await updateProfile(auth.currentUser, { displayName });
+    authUpdates.displayName = displayName;
+  }
+  if (photoURL !== undefined) {
+    authUpdates.photoURL = photoURL;
+  }
+
+  if (Object.keys(authUpdates).length > 0) {
+    try {
+      await updateProfile(auth.currentUser, authUpdates);
+    } catch (e) {
+      console.warn('Firebase Auth updateProfile warning:', e);
+    }
   }
 
   const userRef = doc(db, 'users', uid);
   const updates: any = {
-    displayName,
     updatedAt: Date.now(),
   };
+  if (displayName) updates.displayName = displayName;
   if (currency) updates.currency = currency;
   if (themeMode) updates.themeMode = themeMode;
+  if (photoURL !== undefined) updates.photoURL = photoURL;
 
   await updateDoc(userRef, sanitizeFirestoreData(updates));
+}
+
+/**
+ * Upload and persist user profile photo.
+ * Tries Firebase Storage first; if storage rules or bucket are unavailable,
+ * reliably falls back to local data URI / base64 persisted in Firestore.
+ */
+export async function uploadProfilePhoto(
+  uid: string,
+  imageUri: string,
+  base64Data?: string | null
+): Promise<string> {
+  if (!auth.currentUser) {
+    throw new Error('Not authenticated');
+  }
+
+  let finalPhotoUrl = imageUri;
+
+  try {
+    const { ref, uploadBytes, getDownloadURL } = await import('firebase/storage');
+    const { storage } = await import('./firebase');
+
+    const response = await fetch(imageUri);
+    const blob = await response.blob();
+    const filename = `profile_${uid}_${Date.now()}.jpg`;
+    const storageRef = ref(storage, `users/${uid}/profile/${filename}`);
+
+    const snapshot = await uploadBytes(storageRef, blob);
+    finalPhotoUrl = await getDownloadURL(snapshot.ref);
+  } catch (storageErr) {
+    console.warn('Firebase Storage upload notice (falling back to direct URI/base64):', storageErr);
+    if (base64Data) {
+      finalPhotoUrl = `data:image/jpeg;base64,${base64Data}`;
+    } else {
+      finalPhotoUrl = imageUri;
+    }
+  }
+
+  // Persist to Firebase Auth and Firestore user profile doc
+  await updateUserProfile(auth.currentUser.displayName || 'User', undefined, undefined, finalPhotoUrl);
+  return finalPhotoUrl;
+}
+
+/**
+ * Removes user profile photo
+ */
+export async function removeProfilePhoto(uid: string): Promise<void> {
+  if (!auth.currentUser) {
+    throw new Error('Not authenticated');
+  }
+  await updateUserProfile(auth.currentUser.displayName || 'User', undefined, undefined, null);
 }
