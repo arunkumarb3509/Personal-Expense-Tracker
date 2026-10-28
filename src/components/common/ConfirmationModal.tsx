@@ -18,6 +18,7 @@ export interface ConfirmationModalProps {
   confirmText?: string;
   cancelText?: string;
   variant?: 'danger' | 'warning' | 'primary';
+  confirmVariant?: 'danger' | 'warning' | 'primary' | string;
   loading?: boolean;
   onConfirm: () => void;
   onCancel: () => void;
@@ -29,20 +30,22 @@ export function ConfirmationModal({
   message,
   confirmText = 'Confirm',
   cancelText = 'Cancel',
-  variant = 'danger',
+  variant,
+  confirmVariant,
   loading = false,
   onConfirm,
   onCancel,
 }: ConfirmationModalProps) {
   const { colors, typography, radius, spacing } = useTheme();
+  const effectiveVariant = variant || (confirmVariant as 'danger' | 'warning' | 'primary') || 'danger';
 
   let icon = <AlertTriangle size={32} color={colors.warning} />;
   let iconBg = colors.warningLight;
 
-  if (variant === 'danger') {
+  if (effectiveVariant === 'danger') {
     icon = <Trash2 size={32} color={colors.error} />;
     iconBg = colors.errorLight;
-  } else if (variant === 'primary') {
+  } else if (effectiveVariant === 'primary') {
     icon = <LogOut size={32} color={colors.primary} />;
     iconBg = colors.primaryLight;
   }
@@ -117,7 +120,7 @@ export function ConfirmationModal({
                   <Button
                     title={confirmText}
                     onPress={onConfirm}
-                    variant={variant === 'danger' ? 'danger' : 'primary'}
+                    variant={effectiveVariant === 'danger' ? 'danger' : 'primary'}
                     size="sm"
                     loading={loading}
                   />

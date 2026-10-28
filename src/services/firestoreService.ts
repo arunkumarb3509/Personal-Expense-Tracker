@@ -86,6 +86,8 @@ export async function addWallet(
     icon?: string;
     accountNumberLast4?: string;
     isDefault?: boolean;
+    status?: 'active' | 'archived';
+    linkedBankId?: string;
   }
 ): Promise<Wallet> {
   const walletId = `wallet_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
@@ -106,6 +108,8 @@ export async function addWallet(
     icon: walletData.icon || typeConfig.icon || 'Building2',
     accountNumberLast4: walletData.accountNumberLast4 ? walletData.accountNumberLast4.trim() : '',
     isDefault: walletData.isDefault || false,
+    status: walletData.status || 'active',
+    linkedBankId: walletData.linkedBankId || '',
     createdAt: now,
     updatedAt: now,
   };
@@ -125,6 +129,20 @@ export async function updateWallet(
     updatedAt: Date.now(),
   });
   await updateDoc(walletRef, cleanUpdates);
+}
+
+export async function setDefaultWallet(uid: string, walletId: string): Promise<void> {
+  const walletsRef = collection(db, 'users', uid, 'wallets');
+  const snapshot = await getDocs(walletsRef);
+  const batch = writeBatch(db);
+  const now = Date.now();
+  snapshot.forEach((d) => {
+    batch.update(d.ref, {
+      isDefault: d.id === walletId,
+      updatedAt: now,
+    });
+  });
+  await batch.commit();
 }
 
 export async function deleteWallet(uid: string, walletId: string): Promise<void> {
@@ -194,24 +212,32 @@ export async function addTransaction(
     timestamp = now;
   }
 
+  const isTransfer = data.type === 'transfer';
+  const transferId = isTransfer ? `tr_${now}_${Math.random().toString(36).substring(2, 7)}` : '';
+
   const newTx: Transaction = {
     id: txId,
     userId: uid,
     amount: Number(data.amount) || 0,
     type: data.type,
-    categoryId: data.categoryId || 'other',
-    categoryName: data.categoryName || 'Other',
+    categoryId: data.categoryId || (isTransfer ? 'transfer' : 'other'),
+    categoryName: data.categoryName || (isTransfer ? 'Transfer' : 'Other'),
     subcategory: data.subcategory || '',
     walletId: data.walletId,
+    accountId: data.walletId,
     walletName: data.walletName || '',
+    accountName: data.walletName || '',
     targetWalletId: data.targetWalletId || '',
+    targetAccountId: data.targetWalletId || '',
     targetWalletName: data.targetWalletName || '',
+    targetAccountName: data.targetWalletName || '',
+    transferId,
     personId: data.personId || '',
     personName: data.personName || '',
     date: data.date,
     time: data.time || '',
     timestamp,
-    description: (data.description || data.categoryName || 'Transaction').trim(),
+    description: (data.description || data.categoryName || (isTransfer ? 'Transfer' : 'Transaction')).trim(),
     notes: data.notes || '',
     receiptUrl: data.receiptUrl || '',
     paymentStatus: 'completed',

@@ -110,7 +110,7 @@ export default function ExportDataScreen() {
                   { backgroundColor: colors.primaryLight, borderRadius: radius.lg },
                 ]}
               >
-                <Receipt size={24} color={colors.primary} />
+                <Receipt size={24} color={colors.primary} />  
               </View>
 
               <View style={{ marginLeft: 14, flex: 1 }}>

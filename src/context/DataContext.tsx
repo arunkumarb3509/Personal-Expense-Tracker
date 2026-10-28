@@ -24,11 +24,14 @@ import {
   addRecurringTransaction as addRecurringService,
   deleteRecurringTransaction as deleteRecurringService,
   markNotificationAsRead as markNotificationReadService,
+  setDefaultWallet as setDefaultWalletService,
   addAppNotification,
 } from '@/services/firestoreService';
 import {
   calculateFinancialSummary,
   calculateGPayMetrics,
+  calculateAllAccountBalances,
+  calculateAccountBalance,
 } from '@/services/balanceCalculator';
 import { format } from 'date-fns';
 
@@ -41,6 +44,15 @@ interface DataContextType {
   notifications: AppNotification[];
   unreadNotificationCount: number;
   isLoadingData: boolean;
+
+  // Active / Selected Account
+  activeWalletId: string | null;
+  setActiveWalletId: (id: string | null) => void;
+  activeWallet: Wallet | null;
+  activeBalance: number;
+  calculatedBalances: Record<string, number>;
+  setDefaultAccount: (walletId: string) => Promise<void>;
+  getAccountTransactions: (walletId: string) => Transaction[];
 
   // Computed Financial Metrics
   totalWalletBalance: number;
@@ -238,12 +250,21 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     };
   }, [isAuthenticated, uid, currentMonthStr]);
 
-  // Compute Financial Summary & GPay/Cash/Savings metrics
+  const [activeWalletId, setActiveWalletId] = useState<string | null>(null);
+
+  // Exact live calculated balance for each account derived from opening balance + transactions
+  const calculatedBalances = useMemo(() => {
+    return calculateAllAccountBalances(wallets, transactions);
+  }, [wallets, transactions]);
+
+  // Compute Financial Summary with active account and live transaction history
   const financialSummary = useMemo(() => {
-    return calculateFinancialSummary(wallets, people);
-  }, [wallets, people]);
+    return calculateFinancialSummary(wallets, people, transactions, activeWalletId);
+  }, [wallets, people, transactions, activeWalletId]);
 
   const {
+    activeWallet,
+    activeBalance,
     gpayWallet,
     gpayBalance,
     cashWallet,
@@ -375,6 +396,21 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     await deleteWalletService(uid, walletId);
   };
 
+  const setDefaultAccount = async (walletId: string) => {
+    if (!uid) throw new Error('User not authenticated');
+    await setDefaultWalletService(uid, walletId);
+  };
+
+  const getAccountTransactions = (walletId: string) => {
+    return transactions.filter(
+      (tx) =>
+        tx.walletId === walletId ||
+        tx.accountId === walletId ||
+        tx.targetWalletId === walletId ||
+        tx.targetAccountId === walletId
+    );
+  };
+
   const transfer = async (
     fromWalletId: string,
     toWalletId: string,
@@ -384,21 +420,36 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     notes?: string
   ) => {
     if (!uid) throw new Error('User not authenticated');
+    if (fromWalletId === toWalletId) {
+      throw new Error('Source and destination accounts cannot be the same.');
+    }
+    const numericAmount = Number(amount);
+    if (isNaN(numericAmount) || numericAmount <= 0) {
+      throw new Error('Please enter a valid positive transfer amount.');
+    }
+
     const fromW = wallets.find((w) => w.id === fromWalletId);
     const toW = wallets.find((w) => w.id === toWalletId);
 
+    const availableBal = calculatedBalances[fromWalletId] ?? fromW?.currentBalance ?? 0;
+    if (fromW?.type !== 'credit_card' && numericAmount > availableBal) {
+      throw new Error(
+        `Transfer amount exceeds available balance in ${fromW?.name || 'source account'} (Available: ₹${availableBal.toFixed(2)}).`
+      );
+    }
+
     return await addTransactionService(uid, {
-      amount,
+      amount: numericAmount,
       type: 'transfer',
       categoryId: 'transfer',
-      categoryName: 'Wallet Transfer',
+      categoryName: 'Account Transfer',
       walletId: fromWalletId,
-      walletName: fromW?.name || 'Wallet',
+      walletName: fromW?.name || 'Account',
       targetWalletId: toWalletId,
-      targetWalletName: toW?.name || 'Target Wallet',
+      targetWalletName: toW?.name || 'Target Account',
       date,
-      description: description || `Transfer to ${toW?.name || 'Wallet'}`,
-      notes: notes || '',
+      description: description || `Transfer from ${fromW?.name || 'Account'} to ${toW?.name || 'Account'}`,
+      notes: notes || 'Bank-to-Bank Self Transfer',
     });
   };
 
@@ -536,6 +587,13 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         notifications,
         unreadNotificationCount,
         isLoadingData,
+        activeWalletId,
+        setActiveWalletId,
+        activeWallet,
+        activeBalance,
+        calculatedBalances,
+        setDefaultAccount,
+        getAccountTransactions,
         totalWalletBalance,
         totalReceivable,
         totalPayable,

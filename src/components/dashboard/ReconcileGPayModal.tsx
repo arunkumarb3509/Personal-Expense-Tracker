@@ -31,12 +31,16 @@ export interface ReconcileGPayModalProps {
   visible: boolean;
   onClose: () => void;
   onReviewTransactions?: () => void;
+  currentAppBalance?: number;
+  walletId?: string;
 }
 
 export function ReconcileGPayModal({
   visible,
   onClose,
   onReviewTransactions,
+  currentAppBalance,
+  walletId,
 }: ReconcileGPayModalProps) {
   const { colors, typography, radius, spacing } = useTheme();
   const { gpayWallet, gpayBalance, reconcileGPayBalance } = useData();

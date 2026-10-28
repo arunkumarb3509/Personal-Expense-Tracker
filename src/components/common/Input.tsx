@@ -153,7 +153,9 @@ export function TextInput({
 export interface AmountInputProps {
   label?: string;
   value: string;
-  onChangeText: (text: string) => void;
+  onChangeText?: (text: string) => void;
+  onChangeAmount?: (text: string) => void;
+  placeholder?: string;
   currencySymbol?: string;
   error?: string;
   containerStyle?: ViewStyle;
@@ -163,6 +165,8 @@ export function AmountInput({
   label = 'Amount',
   value,
   onChangeText,
+  onChangeAmount,
+  placeholder,
   currencySymbol = '₹',
   error,
   containerStyle,
@@ -177,7 +181,8 @@ export function AmountInput({
     if (parts.length > 2) {
       return;
     }
-    onChangeText(sanitized);
+    onChangeText && onChangeText(sanitized);
+    onChangeAmount && onChangeAmount(sanitized);
   };
 
   return (

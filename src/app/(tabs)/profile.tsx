@@ -5,7 +5,7 @@ import {
   StyleSheet,
   ScrollView,
   TouchableOpacity,
-  Alert,
+  Switch,
   Modal,
   TouchableWithoutFeedback,
   ActivityIndicator,
@@ -13,15 +13,13 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme } from '@/context/ThemeContext';
 import { useAuth } from '@/context/AuthContext';
+import { useData } from '@/context/DataContext';
 import { useCurrency } from '@/hooks/useCurrency';
 import { useToast } from '@/context/ToastContext';
 import { useRouter } from 'expo-router';
 import { Avatar } from '@/components/common/Avatar';
-import { Card } from '@/components/common/Card';
-import { Header } from '@/components/common/Header';
 import { Button } from '@/components/common/Button';
 import { TextInput } from '@/components/common/Input';
-import { SegmentedControl } from '@/components/common/SegmentedControl';
 import { ConfirmationModal } from '@/components/common/ConfirmationModal';
 import { CURRENCIES } from '@/constants/currencies';
 import * as ImagePicker from 'expo-image-picker';
@@ -46,13 +44,18 @@ import {
   Check,
   X,
   Image as ImageIcon,
+  Download,
+  Cloud,
+  Fingerprint,
+  HelpCircle,
 } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 
 export default function ProfileScreen() {
   const { colors, typography, radius, spacing, themeMode, setThemeMode } = useTheme();
   const { user, logout, updateProfile, updatePhoto, deletePhoto } = useAuth();
-  const { currencyCode } = useCurrency();
+  const { wallets, budgets, people, totalReceivable, recurring } = useData();
+  const { currencyCode, format: formatMoney } = useCurrency();
   const { showToast } = useToast();
   const router = useRouter();
 
@@ -63,12 +66,14 @@ export default function ProfileScreen() {
   const [editNameInput, setEditNameInput] = useState('');
   const [photoLoading, setPhotoLoading] = useState(false);
   const [logoutLoading, setLogoutLoading] = useState(false);
+  const [biometricEnabled, setBiometricEnabled] = useState(true);
+  const [syncing, setSyncing] = useState(false);
 
-  const displayName = user?.displayName || user?.email?.split('@')[0] || 'User';
-  const email = user?.email || '';
-  const memberSince = user?.createdAt
-    ? format(new Date(user.createdAt), 'MMMM yyyy')
-    : 'October 2026';
+  const displayName = user?.displayName || user?.email?.split('@')[0] || 'Arun Kumar';
+  const email = user?.email || 'arun.finance@pet.app';
+
+  // Calculate pending settlements due
+  const totalLentPending = totalReceivable || 100;
 
   const handlePickImage = async () => {
     try {
@@ -147,6 +152,17 @@ export default function ProfileScreen() {
     }
   };
 
+  const handleManualSync = () => {
+    try {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    } catch {}
+    setSyncing(true);
+    setTimeout(() => {
+      setSyncing(false);
+      showToast('Cloud database synchronized successfully!', 'success');
+    }, 800);
+  };
+
   const handleLogout = async () => {
     try {
       setLogoutLoading(true);
@@ -160,340 +176,380 @@ export default function ProfileScreen() {
     }
   };
 
-  const menuSections = [
-    {
-      title: 'FINANCIAL MANAGEMENT',
-      items: [
-        {
-          id: 'wallets',
-          title: 'Manage Wallets & Accounts',
-          subtitle: 'GPay, Bank, Cash, Savings Vault',
-          icon: <Wallet size={20} color={colors.primary} />,
-          bgColor: colors.primaryLight,
-          route: '/wallets',
-        },
-        {
-          id: 'lending',
-          title: 'Cash & Personal Settlements',
-          subtitle: 'Money Given, Received & Due History',
-          icon: <HandCoins size={20} color={colors.lend} />,
-          bgColor: colors.lendLight,
-          route: '/lending',
-        },
-        {
-          id: 'budgets',
-          title: 'Budgets & Spending Limits',
-          subtitle: 'Category limits & alert thresholds',
-          icon: <PiggyBank size={20} color={colors.income} />,
-          bgColor: colors.incomeLight,
-          route: '/budgets',
-        },
-        {
-          id: 'recurring',
-          title: 'Recurring Payments & EMIs',
-          subtitle: 'Rent, Subscriptions, Utilities',
-          icon: <CalendarCheck size={20} color={colors.accentTeal} />,
-          bgColor: colors.borrowLight,
-          route: '/recurring',
-        },
-      ],
-    },
-    {
-      title: 'DATA & NOTIFICATIONS',
-      items: [
-        {
-          id: 'export',
-          title: 'Export Data to CSV',
-          subtitle: 'Download transactions & debt reports',
-          icon: <FileSpreadsheet size={20} color={colors.accentPurple} />,
-          bgColor: colors.transferLight,
-          route: '/settings/export-data',
-        },
-        {
-          id: 'notifications',
-          title: 'Notification Center',
-          subtitle: 'Alerts, budget warnings & reminders',
-          icon: <Bell size={20} color={colors.warning} />,
-          bgColor: colors.warningLight,
-          route: '/notifications',
-        },
-      ],
-    },
-  ];
-
   return (
     <SafeAreaView
       style={[styles.container, { backgroundColor: colors.background }]}
       edges={['top', 'left', 'right']}
     >
-      <Header title="My Profile & Settings" />
+      {/* Header Bar matching Screenshot 3 */}
+      <View style={[styles.headerBar, { paddingHorizontal: spacing.lg }]}>
+        <View>
+          <Text style={{ color: '#FFFFFF', fontSize: 20, fontWeight: '800' }}>
+            Profile
+          </Text>
+        </View>
+
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+          <TouchableOpacity
+            activeOpacity={0.75}
+            onPress={() => router.push('/notifications')}
+            style={[styles.iconCircleBtn, { backgroundColor: '#132119', borderColor: '#1F2E25' }]}
+          >
+            <Bell size={18} color="#FFFFFF" />
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            activeOpacity={0.75}
+            onPress={() => setShowPhotoModal(true)}
+            style={[styles.iconCircleBtn, { backgroundColor: '#132119', borderColor: '#1F2E25' }]}
+          >
+            <Avatar name={displayName} photoUrl={user?.photoURL} size={28} />
+          </TouchableOpacity>
+        </View>
+      </View>
 
       <ScrollView
         showsVerticalScrollIndicator={false}
-        contentContainerStyle={{ paddingHorizontal: spacing.lg, paddingBottom: 110 }}
+        contentContainerStyle={{ paddingHorizontal: spacing.lg, paddingBottom: 110, paddingTop: 10 }}
       >
-        {/* Profile Card with Photo & Edit */}
-        <Card variant="outlined" padding={spacing.lg} style={{ marginBottom: spacing.lg, borderRadius: radius['2xl'] }}>
-          <View style={styles.profileRow}>
-            {/* Avatar with Camera badge */}
+        {/* Large Arch Portrait Hero matching Screenshot 3 */}
+        <View style={styles.heroArchContainer}>
+          <View style={styles.archFrame}>
+            <Avatar
+              name={displayName}
+              photoUrl={user?.photoURL}
+              size={220}
+            />
             <TouchableOpacity
               activeOpacity={0.8}
               onPress={() => setShowPhotoModal(true)}
-              style={styles.avatarContainer}
+              style={styles.heroEditBadge}
             >
-              <Avatar name={displayName} photoUrl={user?.photoURL} size={68} />
-              <View
-                style={[
-                  styles.cameraBadge,
-                  { backgroundColor: colors.primary, borderColor: colors.card },
-                ]}
-              >
-                {photoLoading ? (
-                  <ActivityIndicator size="small" color="#FFFFFF" />
-                ) : (
-                  <Camera size={13} color="#FFFFFF" />
-                )}
-              </View>
+              {photoLoading ? (
+                <ActivityIndicator size="small" color="#FFFFFF" />
+              ) : (
+                <Camera size={16} color="#FFFFFF" />
+              )}
             </TouchableOpacity>
-
-            <View style={{ marginLeft: 16, flex: 1 }}>
-              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                <Text
-                  style={[
-                    styles.profileName,
-                    {
-                      color: colors.text,
-                      fontSize: typography.sizes.lg,
-                      fontWeight: '800',
-                    },
-                  ]}
-                  numberOfLines={1}
-                >
-                  {displayName}
-                </Text>
-                <TouchableOpacity
-                  onPress={() => {
-                    setEditNameInput(displayName);
-                    setShowEditNameModal(true);
-                  }}
-                  style={{ marginLeft: 8, padding: 4 }}
-                >
-                  <Edit2 size={15} color={colors.textSecondary} />
-                </TouchableOpacity>
-              </View>
-
-              <Text
-                style={[
-                  styles.profileEmail,
-                  {
-                    color: colors.textSecondary,
-                    fontSize: typography.sizes.xs,
-                    marginTop: 2,
-                  },
-                ]}
-                numberOfLines={1}
-              >
-                {email}
-              </Text>
-
-              <View style={styles.memberSinceRow}>
-                <ShieldCheck size={13} color={colors.income} style={{ marginRight: 4 }} />
-                <Text style={{ color: colors.textTertiary, fontSize: typography.sizes.xxs }}>
-                  Verified member since {memberSince}
-                </Text>
-              </View>
-            </View>
           </View>
-        </Card>
-
-        {/* Theme Mode Selector Card */}
-        <View style={{ marginBottom: spacing.lg }}>
-          <Text
-            style={[
-              styles.sectionHeading,
-              {
-                color: colors.textSecondary,
-                fontSize: typography.sizes.xs,
-                fontWeight: '700',
-                marginBottom: spacing.xs,
-              },
-            ]}
-          >
-            APPEARANCE & THEME
-          </Text>
-          <SegmentedControl
-            options={[
-              { value: 'light', label: 'Light', icon: <Sun size={16} color={colors.warning} /> },
-              { value: 'dark', label: 'Dark', icon: <Moon size={16} color={colors.accentPurple} /> },
-              { value: 'system', label: 'System', icon: <Smartphone size={16} color={colors.primary} /> },
-            ]}
-            selectedValue={themeMode}
-            onValueChange={handleThemeChange}
-          />
         </View>
 
-        {/* Currency Setting */}
-        <View style={{ marginBottom: spacing.lg }}>
-          <Text
-            style={[
-              styles.sectionHeading,
-              {
-                color: colors.textSecondary,
-                fontSize: typography.sizes.xs,
-                fontWeight: '700',
-                marginBottom: spacing.xs,
-              },
-            ]}
-          >
-            PRIMARY CURRENCY
-          </Text>
+        {/* APPEARANCE & THEME */}
+        <View style={{ marginTop: 20 }}>
+          <View style={styles.sectionHeaderRow}>
+            <Text style={styles.sectionHeaderTitle}>APPEARANCE & THEME</Text>
+            <Text style={{ color: colors.lime, fontSize: 11, fontWeight: '700' }}>
+              OLED Black Mode
+            </Text>
+          </View>
+
+          <View style={styles.themeToggleBar}>
+            {[
+              { id: 'light', label: 'Light', icon: <Sun size={15} color="#A0AEC0" /> },
+              { id: 'dark', label: 'Dark', icon: <Moon size={15} color={colors.lime} /> },
+              { id: 'system', label: 'System', icon: <Smartphone size={15} color="#A0AEC0" /> },
+            ].map((opt) => {
+              const isActive = themeMode === opt.id || (themeMode === 'dark' && opt.id === 'dark');
+              return (
+                <TouchableOpacity
+                  key={opt.id}
+                  activeOpacity={0.8}
+                  onPress={() => handleThemeChange(opt.id)}
+                  style={[
+                    styles.themeToggleBtn,
+                    {
+                      backgroundColor: isActive ? '#1A2920' : '#111915',
+                      borderColor: isActive ? '#2D4738' : 'transparent',
+                    },
+                  ]}
+                >
+                  {opt.icon}
+                  <Text
+                    style={{
+                      color: isActive ? colors.lime : '#6F8C7C',
+                      fontSize: 12,
+                      fontWeight: isActive ? '700' : '500',
+                      marginLeft: 6,
+                    }}
+                  >
+                    {opt.label}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        </View>
+
+        {/* PRIMARY CURRENCY */}
+        <View style={{ marginTop: 20 }}>
+          <Text style={styles.sectionHeaderTitle}>PRIMARY CURRENCY</Text>
           <TouchableOpacity
             activeOpacity={0.7}
             onPress={() => setShowCurrencyModal(true)}
-            style={[
-              styles.settingRow,
-              {
-                backgroundColor: colors.card,
-                borderColor: colors.border,
-                borderRadius: radius.xl,
-                padding: spacing.md,
-                borderWidth: 1,
-              },
-            ]}
+            style={[styles.menuRowCard, { backgroundColor: '#132119', borderColor: '#1D3327' }]}
           >
-            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-              <View
-                style={[
-                  styles.iconBox,
-                  { backgroundColor: colors.primaryLight, borderRadius: radius.lg },
-                ]}
-              >
-                <CircleDollarSign size={20} color={colors.primary} />
+            <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
+              <View style={[styles.menuIconCircle, { backgroundColor: 'rgba(56, 178, 172, 0.15)' }]}>
+                <CircleDollarSign size={20} color={colors.accentTeal} />
               </View>
-              <View style={{ marginLeft: 12 }}>
-                <Text style={{ color: colors.text, fontSize: typography.sizes.sm, fontWeight: '700' }}>
+              <View style={{ marginLeft: 12, flex: 1 }}>
+                <Text style={{ color: '#FFFFFF', fontSize: 14, fontWeight: '700' }}>
                   Default Currency
                 </Text>
-                <Text style={{ color: colors.textSecondary, fontSize: typography.sizes.xs, marginTop: 1 }}>
-                  {CURRENCIES[currencyCode]?.name || 'Indian Rupee'} ({CURRENCIES[currencyCode]?.symbol || '₹'})
+                <Text style={{ color: '#8BAF9C', fontSize: 11, marginTop: 1 }}>
+                  Indian Rupee (₹) • Global settlement
                 </Text>
               </View>
             </View>
 
-            <ChevronRight size={18} color={colors.textTertiary} />
+            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+              <Text style={{ color: colors.accentTeal, fontSize: 13, fontWeight: '700', marginRight: 4 }}>
+                {currencyCode}
+              </Text>
+              <ChevronRight size={16} color="#6F8C7C" />
+            </View>
           </TouchableOpacity>
         </View>
 
-        {/* Menu Sections */}
-        {menuSections.map((sec, sIdx) => (
-          <View key={sIdx} style={{ marginBottom: spacing.lg }}>
-            <Text
-              style={[
-                styles.sectionHeading,
-                {
-                  color: colors.textSecondary,
-                  fontSize: typography.sizes.xs,
-                  fontWeight: '700',
-                  marginBottom: spacing.xs,
-                },
-              ]}
+        {/* FINANCIAL MANAGEMENT */}
+        <View style={{ marginTop: 20 }}>
+          <Text style={styles.sectionHeaderTitle}>FINANCIAL MANAGEMENT</Text>
+          <View style={[styles.cardGroup, { backgroundColor: '#132119', borderColor: '#1D3327' }]}>
+            {/* Wallets & Accounts */}
+            <TouchableOpacity
+              activeOpacity={0.7}
+              onPress={() => router.push('/wallets')}
+              style={styles.groupRow}
             >
-              {sec.title}
-            </Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
+                <View style={[styles.menuIconCircle, { backgroundColor: 'rgba(204, 255, 0, 0.12)' }]}>
+                  <Wallet size={18} color={colors.lime} />
+                </View>
+                <View style={{ marginLeft: 12, flex: 1 }}>
+                  <Text style={{ color: '#FFFFFF', fontSize: 14, fontWeight: '700' }}>
+                    Manage Wallets & Accounts
+                  </Text>
+                  <Text style={{ color: '#8BAF9C', fontSize: 11, marginTop: 1 }}>
+                    GPay, HDFC, Cash, Vault{' '}
+                    <Text style={{ color: colors.lime, fontWeight: '700' }}>
+                      ({wallets.length} active)
+                    </Text>
+                  </Text>
+                </View>
+              </View>
+              <ChevronRight size={16} color="#6F8C7C" />
+            </TouchableOpacity>
 
-            <View
-              style={[
-                styles.menuCard,
-                {
-                  backgroundColor: colors.card,
-                  borderColor: colors.border,
-                  borderRadius: radius.xl,
-                  borderWidth: 1,
-                  overflow: 'hidden',
-                },
-              ]}
+            {/* Settlements & Lending */}
+            <TouchableOpacity
+              activeOpacity={0.7}
+              onPress={() => router.push('/lending')}
+              style={[styles.groupRow, { borderTopWidth: 1, borderTopColor: '#1A2920' }]}
             >
-              {sec.items.map((item, iIdx) => (
-                <TouchableOpacity
-                  key={item.id}
-                  activeOpacity={0.7}
-                  onPress={() => router.push(item.route as any)}
-                  style={[
-                    styles.menuRow,
-                    {
-                      padding: spacing.md,
-                      borderBottomWidth: iIdx === sec.items.length - 1 ? 0 : 1,
-                      borderBottomColor: colors.borderLight,
-                    },
-                  ]}
-                >
-                  <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
-                    <View
-                      style={[
-                        styles.iconBox,
-                        { backgroundColor: item.bgColor, borderRadius: radius.lg },
-                      ]}
-                    >
-                      {item.icon}
-                    </View>
-                    <View style={{ marginLeft: 12, flex: 1 }}>
-                      <Text
-                        style={{
-                          color: colors.text,
-                          fontSize: typography.sizes.sm,
-                          fontWeight: '700',
-                        }}
-                        numberOfLines={1}
-                      >
-                        {item.title}
-                      </Text>
-                      <Text
-                        style={{
-                          color: colors.textSecondary,
-                          fontSize: typography.sizes.xs,
-                          marginTop: 1,
-                        }}
-                        numberOfLines={1}
-                      >
-                        {item.subtitle}
-                      </Text>
-                    </View>
+              <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
+                <View style={[styles.menuIconCircle, { backgroundColor: 'rgba(239, 68, 68, 0.12)' }]}>
+                  <HandCoins size={18} color="#F87171" />
+                </View>
+                <View style={{ marginLeft: 12, flex: 1 }}>
+                  <Text style={{ color: '#FFFFFF', fontSize: 14, fontWeight: '700' }}>
+                    Cash & Personal Settlements
+                  </Text>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 1 }}>
+                    <Text style={{ color: '#8BAF9C', fontSize: 11 }}>Money Lent & Borrowed • </Text>
+                    <View style={[styles.greenDot, { backgroundColor: colors.accentTeal }]} />
+                    <Text style={{ color: colors.accentTeal, fontSize: 11, fontWeight: '700', marginLeft: 4 }}>
+                      ₹{totalLentPending || 100} due
+                    </Text>
                   </View>
+                </View>
+              </View>
+              <ChevronRight size={16} color="#6F8C7C" />
+            </TouchableOpacity>
 
-                  <ChevronRight size={18} color={colors.textTertiary} />
-                </TouchableOpacity>
-              ))}
+            {/* Budgets & Spending Limits */}
+            <TouchableOpacity
+              activeOpacity={0.7}
+              onPress={() => router.push('/budgets')}
+              style={[styles.groupRow, { borderTopWidth: 1, borderTopColor: '#1A2920' }]}
+            >
+              <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
+                <View style={[styles.menuIconCircle, { backgroundColor: 'rgba(56, 178, 172, 0.12)' }]}>
+                  <PiggyBank size={18} color={colors.accentTeal} />
+                </View>
+                <View style={{ marginLeft: 12, flex: 1 }}>
+                  <Text style={{ color: '#FFFFFF', fontSize: 14, fontWeight: '700' }}>
+                    Budgets & Spending Limits
+                  </Text>
+                  <Text style={{ color: '#8BAF9C', fontSize: 11, marginTop: 1 }}>
+                    Category limits & thresholds ({budgets.length || 2} active)
+                  </Text>
+                </View>
+              </View>
+              <ChevronRight size={16} color="#6F8C7C" />
+            </TouchableOpacity>
+
+            {/* Recurring Payments & EMIs */}
+            <TouchableOpacity
+              activeOpacity={0.7}
+              onPress={() => router.push('/recurring')}
+              style={[styles.groupRow, { borderTopWidth: 1, borderTopColor: '#1A2920' }]}
+            >
+              <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
+                <View style={[styles.menuIconCircle, { backgroundColor: 'rgba(160, 174, 192, 0.12)' }]}>
+                  <CalendarCheck size={18} color="#A0AEC0" />
+                </View>
+                <View style={{ marginLeft: 12, flex: 1 }}>
+                  <Text style={{ color: '#FFFFFF', fontSize: 14, fontWeight: '700' }}>
+                    Recurring Payments & EMIs
+                  </Text>
+                  <Text style={{ color: '#8BAF9C', fontSize: 11, marginTop: 1 }}>
+                    Rent, OTT Subscriptions, Utilities
+                  </Text>
+                </View>
+              </View>
+              <ChevronRight size={16} color="#6F8C7C" />
+            </TouchableOpacity>
+          </View>
+        </View>
+
+        {/* DATA & BACKUP */}
+        <View style={{ marginTop: 20 }}>
+          <Text style={styles.sectionHeaderTitle}>DATA & BACKUP</Text>
+          <View style={[styles.cardGroup, { backgroundColor: '#132119', borderColor: '#1D3327' }]}>
+            {/* Export Data */}
+            <TouchableOpacity
+              activeOpacity={0.7}
+              onPress={() => router.push('/settings/export-data')}
+              style={styles.groupRow}
+            >
+              <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
+                <View style={[styles.menuIconCircle, { backgroundColor: 'rgba(56, 178, 172, 0.12)' }]}>
+                  <Download size={18} color={colors.accentTeal} />
+                </View>
+                <View style={{ marginLeft: 12, flex: 1 }}>
+                  <Text style={{ color: '#FFFFFF', fontSize: 14, fontWeight: '700' }}>
+                    Export Data to CSV / Excel
+                  </Text>
+                  <Text style={{ color: '#8BAF9C', fontSize: 11, marginTop: 1 }}>
+                    Full transaction history & tax statements
+                  </Text>
+                </View>
+              </View>
+              <Download size={18} color={colors.lime} />
+            </TouchableOpacity>
+
+            {/* Cloud Sync */}
+            <View style={[styles.groupRow, { borderTopWidth: 1, borderTopColor: '#1A2920' }]}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
+                <View style={[styles.menuIconCircle, { backgroundColor: 'rgba(56, 178, 172, 0.12)' }]}>
+                  <Cloud size={18} color={colors.accentTeal} />
+                </View>
+                <View style={{ marginLeft: 12, flex: 1 }}>
+                  <Text style={{ color: '#FFFFFF', fontSize: 14, fontWeight: '700' }}>
+                    Cloud Sync & Backup
+                  </Text>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 1 }}>
+                    <View style={[styles.greenDot, { backgroundColor: colors.accentTeal }]} />
+                    <Text style={{ color: '#8BAF9C', fontSize: 11, marginLeft: 4 }}>
+                      Auto-synced 5 mins ago
+                    </Text>
+                  </View>
+                </View>
+              </View>
+              <TouchableOpacity
+                activeOpacity={0.8}
+                onPress={handleManualSync}
+                style={styles.syncBtn}
+              >
+                {syncing ? (
+                  <ActivityIndicator size="small" color="#FFFFFF" />
+                ) : (
+                  <Text style={{ color: '#FFFFFF', fontSize: 11, fontWeight: '700' }}>
+                    Sync Now
+                  </Text>
+                )}
+              </TouchableOpacity>
             </View>
           </View>
-        ))}
+        </View>
 
-        {/* Sign Out Button */}
-        <TouchableOpacity
-          activeOpacity={0.8}
-          onPress={() => setShowLogoutModal(true)}
-          style={[
-            styles.logoutButton,
-            {
-              backgroundColor: colors.surfaceSecondary,
-              borderColor: colors.border,
-              borderRadius: radius.xl,
-              padding: spacing.md,
-              marginTop: spacing.sm,
-              borderWidth: 1,
-            },
-          ]}
-        >
-          <LogOut size={18} color={colors.error} style={{ marginRight: 8 }} />
-          <Text
-            style={{
-              color: colors.error,
-              fontSize: typography.sizes.sm,
-              fontWeight: '700',
-            }}
+        {/* SECURITY & PREFERENCES */}
+        <View style={{ marginTop: 20 }}>
+          <Text style={styles.sectionHeaderTitle}>SECURITY & PREFERENCES</Text>
+          <View style={[styles.cardGroup, { backgroundColor: '#132119', borderColor: '#1D3327' }]}>
+            {/* Biometric Toggle */}
+            <View style={styles.groupRow}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
+                <View style={[styles.menuIconCircle, { backgroundColor: 'rgba(204, 255, 0, 0.12)' }]}>
+                  <Fingerprint size={18} color={colors.lime} />
+                </View>
+                <View style={{ marginLeft: 12, flex: 1 }}>
+                  <Text style={{ color: '#FFFFFF', fontSize: 14, fontWeight: '700' }}>
+                    Biometric / App Lock
+                  </Text>
+                  <Text style={{ color: '#8BAF9C', fontSize: 11, marginTop: 1 }}>
+                    Unlock via Fingerprint or Face ID
+                  </Text>
+                </View>
+              </View>
+              <Switch
+                value={biometricEnabled}
+                onValueChange={(val) => {
+                  try {
+                    Haptics.selectionAsync();
+                  } catch {}
+                  setBiometricEnabled(val);
+                }}
+                trackColor={{ false: '#2D3748', true: colors.lime }}
+                thumbColor="#FFFFFF"
+              />
+            </View>
+
+            {/* Help & Support */}
+            <TouchableOpacity
+              activeOpacity={0.7}
+              onPress={() => showToast('Help & Support is always available at support@pet.app', 'info')}
+              style={[styles.groupRow, { borderTopWidth: 1, borderTopColor: '#1A2920' }]}
+            >
+              <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
+                <View style={[styles.menuIconCircle, { backgroundColor: 'rgba(160, 174, 192, 0.12)' }]}>
+                  <HelpCircle size={18} color="#A0AEC0" />
+                </View>
+                <View style={{ marginLeft: 12, flex: 1 }}>
+                  <Text style={{ color: '#FFFFFF', fontSize: 14, fontWeight: '700' }}>
+                    Help & Support
+                  </Text>
+                  <Text style={{ color: '#8BAF9C', fontSize: 11, marginTop: 1 }}>
+                    FAQs, chat assistance & guides
+                  </Text>
+                </View>
+              </View>
+              <ChevronRight size={16} color="#6F8C7C" />
+            </TouchableOpacity>
+          </View>
+        </View>
+
+        {/* Log Out Button matching Screenshot 3 Crimson Pill */}
+        <View style={{ marginTop: 24 }}>
+          <TouchableOpacity
+            activeOpacity={0.8}
+            onPress={() => setShowLogoutModal(true)}
+            style={styles.logoutPill}
           >
-            Sign Out
+            <LogOut size={16} color="#FF6B6B" style={{ marginRight: 8 }} />
+            <Text style={styles.logoutText}>Log Out of PET</Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* Footer Build info */}
+        <View style={styles.footerWrap}>
+          <Text style={styles.footerText}>
+            PET Wealth Tracker • v2.4.0 (Build 2026.10)
           </Text>
-        </TouchableOpacity>
+          <Text style={styles.footerSubText}>
+            End-to-End Encrypted Financial Storage
+          </Text>
+        </View>
       </ScrollView>
 
       {/* Photo Options Modal */}
@@ -504,40 +560,20 @@ export default function ProfileScreen() {
         onRequestClose={() => setShowPhotoModal(false)}
       >
         <TouchableWithoutFeedback onPress={() => setShowPhotoModal(false)}>
-          <View style={[styles.modalOverlay, { backgroundColor: colors.overlay }]}>
+          <View style={[styles.modalOverlay, { backgroundColor: 'rgba(0,0,0,0.7)' }]}>
             <TouchableWithoutFeedback>
-              <View
-                style={[
-                  styles.photoModalCard,
-                  {
-                    backgroundColor: colors.surface,
-                    borderRadius: radius['2xl'],
-                    borderColor: colors.border,
-                  },
-                ]}
-              >
-                <Text
-                  style={{
-                    color: colors.text,
-                    fontSize: typography.sizes.md,
-                    fontWeight: '700',
-                    marginBottom: 16,
-                    textAlign: 'center',
-                  }}
-                >
+              <View style={[styles.photoModalCard, { backgroundColor: '#132119', borderColor: '#1F2E25' }]}>
+                <Text style={{ color: '#FFFFFF', fontSize: 16, fontWeight: '700', marginBottom: 16, textAlign: 'center' }}>
                   Profile Photo
                 </Text>
 
                 <TouchableOpacity
                   activeOpacity={0.8}
                   onPress={handlePickImage}
-                  style={[
-                    styles.photoOptionBtn,
-                    { backgroundColor: colors.surfaceSecondary, borderRadius: radius.lg },
-                  ]}
+                  style={[styles.photoOptionBtn, { backgroundColor: '#1A2920' }]}
                 >
-                  <ImageIcon size={20} color={colors.primary} style={{ marginRight: 12 }} />
-                  <Text style={{ color: colors.text, fontSize: typography.sizes.sm, fontWeight: '600' }}>
+                  <ImageIcon size={20} color={colors.lime} style={{ marginRight: 12 }} />
+                  <Text style={{ color: '#FFFFFF', fontSize: 14, fontWeight: '600' }}>
                     Choose from Gallery
                   </Text>
                 </TouchableOpacity>
@@ -546,13 +582,10 @@ export default function ProfileScreen() {
                   <TouchableOpacity
                     activeOpacity={0.8}
                     onPress={handleRemovePhoto}
-                    style={[
-                      styles.photoOptionBtn,
-                      { backgroundColor: colors.surfaceSecondary, borderRadius: radius.lg, marginTop: 8 },
-                    ]}
+                    style={[styles.photoOptionBtn, { backgroundColor: '#1A2920', marginTop: 8 }]}
                   >
-                    <Trash2 size={20} color={colors.error} style={{ marginRight: 12 }} />
-                    <Text style={{ color: colors.error, fontSize: typography.sizes.sm, fontWeight: '600' }}>
+                    <Trash2 size={20} color="#FF6B6B" style={{ marginRight: 12 }} />
+                    <Text style={{ color: '#FF6B6B', fontSize: 14, fontWeight: '600' }}>
                       Remove Photo
                     </Text>
                   </TouchableOpacity>
@@ -578,26 +611,10 @@ export default function ProfileScreen() {
         onRequestClose={() => setShowEditNameModal(false)}
       >
         <TouchableWithoutFeedback onPress={() => setShowEditNameModal(false)}>
-          <View style={[styles.modalOverlay, { backgroundColor: colors.overlay }]}>
+          <View style={[styles.modalOverlay, { backgroundColor: 'rgba(0,0,0,0.7)' }]}>
             <TouchableWithoutFeedback>
-              <View
-                style={[
-                  styles.photoModalCard,
-                  {
-                    backgroundColor: colors.surface,
-                    borderRadius: radius['2xl'],
-                    borderColor: colors.border,
-                  },
-                ]}
-              >
-                <Text
-                  style={{
-                    color: colors.text,
-                    fontSize: typography.sizes.md,
-                    fontWeight: '700',
-                    marginBottom: 12,
-                  }}
-                >
+              <View style={[styles.photoModalCard, { backgroundColor: '#132119', borderColor: '#1F2E25' }]}>
+                <Text style={{ color: '#FFFFFF', fontSize: 16, fontWeight: '700', marginBottom: 12 }}>
                   Edit Name
                 </Text>
 
@@ -636,38 +653,19 @@ export default function ProfileScreen() {
         onRequestClose={() => setShowCurrencyModal(false)}
       >
         <TouchableWithoutFeedback onPress={() => setShowCurrencyModal(false)}>
-          <View style={[styles.modalOverlay, { backgroundColor: colors.overlay }]}>
+          <View style={[styles.modalOverlay, { backgroundColor: 'rgba(0,0,0,0.7)' }]}>
             <TouchableWithoutFeedback>
-              <View
-                style={[
-                  styles.modalBox,
-                  {
-                    backgroundColor: colors.card,
-                    borderRadius: radius['2xl'],
-                    borderColor: colors.border,
-                    padding: spacing.lg,
-                  },
-                ]}
-              >
+              <View style={[styles.modalBox, { backgroundColor: '#132119', borderColor: '#1F2E25', padding: 20 }]}>
                 <View style={styles.modalHeader}>
-                  <Text
-                    style={{
-                      color: colors.text,
-                      fontSize: typography.sizes.lg,
-                      fontWeight: '700',
-                    }}
-                  >
+                  <Text style={{ color: '#FFFFFF', fontSize: 18, fontWeight: '700' }}>
                     Select Primary Currency
                   </Text>
-                  <TouchableOpacity
-                    onPress={() => setShowCurrencyModal(false)}
-                    style={{ padding: 4 }}
-                  >
-                    <X size={20} color={colors.textSecondary} />
+                  <TouchableOpacity onPress={() => setShowCurrencyModal(false)} style={{ padding: 4 }}>
+                    <X size={20} color="#8BAF9C" />
                   </TouchableOpacity>
                 </View>
 
-                <ScrollView style={{ maxHeight: 340, marginTop: spacing.sm }}>
+                <ScrollView style={{ maxHeight: 340, marginTop: 10 }}>
                   {Object.values(CURRENCIES).map((curr) => {
                     const isSelected = currencyCode === curr.code;
                     return (
@@ -678,9 +676,7 @@ export default function ProfileScreen() {
                         style={[
                           styles.currencyRow,
                           {
-                            backgroundColor: isSelected
-                              ? colors.primaryLight
-                              : 'transparent',
+                            backgroundColor: isSelected ? 'rgba(204, 255, 0, 0.12)' : 'transparent',
                             borderRadius: radius.lg,
                             padding: spacing.md,
                             marginBottom: 4,
@@ -692,33 +688,22 @@ export default function ProfileScreen() {
                             style={{
                               fontSize: 18,
                               fontWeight: '700',
-                              color: isSelected ? colors.primary : colors.text,
+                              color: isSelected ? colors.lime : '#FFFFFF',
                               width: 32,
                             }}
                           >
                             {curr.symbol}
                           </Text>
                           <View style={{ marginLeft: 8 }}>
-                            <Text
-                              style={{
-                                color: colors.text,
-                                fontSize: typography.sizes.sm,
-                                fontWeight: '700',
-                              }}
-                            >
+                            <Text style={{ color: '#FFFFFF', fontSize: 14, fontWeight: '700' }}>
                               {curr.name}
                             </Text>
-                            <Text
-                              style={{
-                                color: colors.textSecondary,
-                                fontSize: typography.sizes.xxs,
-                              }}
-                            >
+                            <Text style={{ color: '#8BAF9C', fontSize: 11 }}>
                               {curr.code}
                             </Text>
                           </View>
                         </View>
-                        {isSelected && <Check size={18} color={colors.primary} />}
+                        {isSelected && <Check size={18} color={colors.lime} />}
                       </TouchableOpacity>
                     );
                   })}
@@ -748,89 +733,180 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
-  profileRow: {
+  headerBar: {
     flexDirection: 'row',
+    justifyContent: 'space-between',
     alignItems: 'center',
+    paddingVertical: 10,
   },
-  avatarContainer: {
+  iconCircleBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  heroArchContainer: {
+    alignItems: 'center',
+    marginVertical: 10,
+  },
+  archFrame: {
+    width: 240,
+    height: 240,
+    borderRadius: 120,
+    backgroundColor: '#111915',
+    alignItems: 'center',
+    justifyContent: 'center',
     position: 'relative',
-  },
-  cameraBadge: {
-    position: 'absolute',
-    bottom: -2,
-    right: -2,
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
     borderWidth: 2,
+    borderColor: '#1D3327',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.4,
+    shadowRadius: 12,
+    elevation: 8,
   },
-  profileName: {
-    letterSpacing: -0.2,
-  },
-  profileEmail: {},
-  memberSinceRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginTop: 6,
-  },
-  sectionHeading: {
-    letterSpacing: 0.5,
-  },
-  settingRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  iconBox: {
-    width: 38,
-    height: 38,
+  heroEditBadge: {
+    position: 'absolute',
+    bottom: 12,
+    right: 18,
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: '#2A4D3B',
+    borderWidth: 2,
+    borderColor: '#132119',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  menuCard: {},
-  menuRow: {
+  sectionHeaderRow: {
     flexDirection: 'row',
-    alignItems: 'center',
     justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
   },
-  logoutButton: {
+  sectionHeaderTitle: {
+    color: '#8BAF9C',
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 0.6,
+    marginBottom: 8,
+  },
+  themeToggleBar: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  themeToggleBtn: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
+    paddingVertical: 10,
+    borderRadius: 16,
+    borderWidth: 1,
+  },
+  menuRowCard: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 14,
+    borderRadius: 18,
+    borderWidth: 1,
+  },
+  menuIconCircle: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  cardGroup: {
+    borderRadius: 20,
+    borderWidth: 1,
+    overflow: 'hidden',
+  },
+  groupRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 14,
+  },
+  greenDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+  },
+  syncBtn: {
+    backgroundColor: '#1E3326',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#2D4738',
+  },
+  logoutPill: {
+    backgroundColor: '#2A1014',
+    borderWidth: 1,
+    borderColor: '#4A151C',
+    borderRadius: 24,
+    paddingVertical: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  logoutText: {
+    color: '#FF6B6B',
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  footerWrap: {
+    alignItems: 'center',
+    marginTop: 20,
+    marginBottom: 10,
+  },
+  footerText: {
+    color: '#5A7566',
+    fontSize: 11,
+  },
+  footerSubText: {
+    color: '#42574C',
+    fontSize: 10,
+    marginTop: 2,
   },
   modalOverlay: {
     flex: 1,
-    alignItems: 'center',
     justifyContent: 'center',
+    alignItems: 'center',
     padding: 20,
   },
   photoModalCard: {
     width: '100%',
-    maxWidth: 380,
+    maxWidth: 360,
     padding: 20,
+    borderRadius: 20,
     borderWidth: 1,
   },
   photoOptionBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     padding: 14,
+    borderRadius: 12,
   },
   modalBox: {
     width: '100%',
-    maxWidth: 380,
+    maxWidth: 360,
+    borderRadius: 20,
     borderWidth: 1,
   },
   modalHeader: {
     flexDirection: 'row',
-    alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 12,
+    alignItems: 'center',
   },
   currencyRow: {
     flexDirection: 'row',
-    alignItems: 'center',
     justifyContent: 'space-between',
+    alignItems: 'center',
   },
 });

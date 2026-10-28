@@ -183,6 +183,52 @@ export default function AddWalletModal() {
             })}
           </View>
 
+          {/* Popular Account Presets */}
+          <View style={{ marginTop: spacing.md }}>
+            <Text style={{ color: colors.textSecondary, fontSize: typography.sizes.xs, fontWeight: '600', marginBottom: 8 }}>
+              POPULAR CHOICES
+            </Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
+              {[
+                { name: 'Airtel Payments Bank', type: 'bank' as WalletType },
+                { name: 'HDFC Bank', type: 'bank' as WalletType },
+                { name: 'State Bank of India (SBI)', type: 'bank' as WalletType },
+                { name: 'Google Pay (GPay)', type: 'upi' as WalletType },
+                { name: 'Cash in Hand', type: 'cash' as WalletType },
+              ].map((acc) => {
+                const isSelected = walletName === acc.name;
+                return (
+                  <TouchableOpacity
+                    key={acc.name}
+                    activeOpacity={0.7}
+                    onPress={() => {
+                      setWalletName(acc.name);
+                      setSelectedType(acc.type);
+                    }}
+                    style={{
+                      backgroundColor: isSelected ? colors.primary : colors.surfaceSecondary,
+                      borderColor: isSelected ? colors.primary : colors.border,
+                      borderWidth: 1,
+                      paddingHorizontal: 12,
+                      paddingVertical: 6,
+                      borderRadius: radius.full,
+                    }}
+                  >
+                    <Text
+                      style={{
+                        color: isSelected ? colors.primaryForeground : colors.text,
+                        fontSize: typography.sizes.xs,
+                        fontWeight: isSelected ? '700' : '500',
+                      }}
+                    >
+                      {acc.name}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+          </View>
+
           {/* Wallet Name */}
           <View style={{ marginTop: spacing.lg }}>
             <TextInput
@@ -203,6 +249,7 @@ export default function AddWalletModal() {
             value={openingBalance}
             onChangeText={setOpeningBalance}
             currencySymbol={currencySymbol}
+            placeholder="0"
           />
 
           {/* Save Button */}

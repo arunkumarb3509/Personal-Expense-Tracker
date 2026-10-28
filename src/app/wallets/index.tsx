@@ -5,18 +5,23 @@ import {
   StyleSheet,
   ScrollView,
   TouchableOpacity,
+  Modal,
+  FlatList,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme } from '@/context/ThemeContext';
 import { useData } from '@/context/DataContext';
 import { useCurrency } from '@/hooks/useCurrency';
+import { useToast } from '@/context/ToastContext';
 import { useRouter } from 'expo-router';
 import { Header } from '@/components/common/Header';
 import { Card } from '@/components/common/Card';
 import { Button } from '@/components/common/Button';
 import { EmptyState } from '@/components/common/EmptyState';
+import { TransactionItem } from '@/components/transactions/TransactionItem';
 import { ReconcileGPayModal } from '@/components/dashboard/ReconcileGPayModal';
 import { SetGPayBalanceModal } from '@/components/dashboard/SetGPayBalanceModal';
+import { Wallet } from '@/types/wallet';
 import {
   Smartphone,
   Building2,
@@ -28,16 +33,37 @@ import {
   ArrowLeftRight,
   ShieldCheck,
   CheckCircle2,
+  Star,
+  History,
+  X,
+  Check,
 } from 'lucide-react-native';
+import * as Haptics from 'expo-haptics';
 
 export default function WalletsListScreen() {
   const { colors, typography, radius, spacing, shadows } = useTheme();
-  const { wallets, totalWalletBalance, gpayWallet } = useData();
+  const {
+    wallets,
+    gpayWallet,
+    calculatedBalances,
+    setDefaultAccount,
+    activeWalletId,
+    setActiveWalletId,
+    getAccountTransactions,
+  } = useData();
   const { format } = useCurrency();
+  const { showToast } = useToast();
   const router = useRouter();
 
   const [showReconcileModal, setShowReconcileModal] = useState(false);
   const [showSetBalanceModal, setShowSetBalanceModal] = useState(false);
+  const [selectedWalletForHistory, setSelectedWalletForHistory] = useState<Wallet | null>(null);
+
+  // Compute total liquid balance across all accounts using real calculated balances
+  const totalLiquidBalance = wallets.reduce(
+    (acc, w) => acc + (calculatedBalances[w.id] ?? w.currentBalance),
+    0
+  );
 
   const getWalletIcon = (type: string, color: string) => {
     const size = 22;
@@ -56,6 +82,30 @@ export default function WalletsListScreen() {
         return <WalletIcon size={size} color={color} />;
     }
   };
+
+  const handleSetDefault = async (wallet: Wallet) => {
+    try {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    } catch {}
+    try {
+      await setDefaultAccount(wallet.id);
+      showToast(`${wallet.name} is now your default payment account.`, 'success');
+    } catch (err: any) {
+      showToast(err.message || 'Failed to update default account.', 'error');
+    }
+  };
+
+  const handleSetActive = (wallet: Wallet) => {
+    try {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    } catch {}
+    setActiveWalletId(wallet.id);
+    showToast(`Active dashboard account set to ${wallet.name}.`, 'info');
+  };
+
+  const historyTransactions = selectedWalletForHistory
+    ? getAccountTransactions(selectedWalletForHistory.id)
+    : [];
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
@@ -84,7 +134,7 @@ export default function WalletsListScreen() {
         {/* Total Liquid Balance Card */}
         <Card variant="elevated" padding={spacing.xl} style={[styles.totalCard, shadows.sm]}>
           <Text style={{ color: colors.textSecondary, fontSize: typography.sizes.xs, fontWeight: '500' }}>
-            Total Liquid Balance
+            Total Net Balance (All Accounts)
           </Text>
           <Text
             style={{
@@ -95,7 +145,7 @@ export default function WalletsListScreen() {
               marginTop: 2,
             }}
           >
-            {format(totalWalletBalance)}
+            {format(totalLiquidBalance)}
           </Text>
 
           {/* Quick Actions (Transfer Funds, Add Wallet) */}
@@ -111,7 +161,7 @@ export default function WalletsListScreen() {
             </View>
             <View style={{ flex: 1 }}>
               <Button
-                title="Add Wallet"
+                title="Add Account"
                 onPress={() => router.push('/wallets/add-wallet')}
                 variant="secondary"
                 size="sm"
@@ -140,6 +190,10 @@ export default function WalletsListScreen() {
           {wallets.length > 0 ? (
             wallets.map((wallet) => {
               const wColor = wallet.color || colors.primary;
+              const currentBal = calculatedBalances[wallet.id] ?? wallet.currentBalance;
+              const isDefault = !!wallet.isDefault;
+              const isActive = activeWalletId === wallet.id;
+
               return (
                 <Card
                   key={wallet.id}
@@ -148,7 +202,7 @@ export default function WalletsListScreen() {
                   style={{ marginBottom: spacing.md }}
                 >
                   <View style={styles.walletHeaderRow}>
-                    <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
                       <View
                         style={[
                           styles.iconBox,
@@ -161,8 +215,8 @@ export default function WalletsListScreen() {
                         {getWalletIcon(wallet.type, wColor)}
                       </View>
 
-                      <View style={{ marginLeft: 12 }}>
-                        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                      <View style={{ marginLeft: 12, flex: 1 }}>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 4 }}>
                           <Text
                             style={[
                               styles.walletName,
@@ -175,14 +229,12 @@ export default function WalletsListScreen() {
                           >
                             {wallet.name}
                           </Text>
-                          {(wallet.isPrimaryGPay || wallet.name.toLowerCase().includes('gpay')) && (
+
+                          {isDefault && (
                             <View
                               style={[
                                 styles.defaultPill,
-                                {
-                                  backgroundColor: colors.lime,
-                                  marginLeft: 6,
-                                },
+                                { backgroundColor: colors.lime },
                               ]}
                             >
                               <Text
@@ -192,18 +244,16 @@ export default function WalletsListScreen() {
                                   fontWeight: '800',
                                 }}
                               >
-                                GPAY PRIMARY
+                                DEFAULT
                               </Text>
                             </View>
                           )}
-                          {wallet.isDefault && !(wallet.isPrimaryGPay || wallet.name.toLowerCase().includes('gpay')) && (
+
+                          {isActive && (
                             <View
                               style={[
                                 styles.defaultPill,
-                                {
-                                  backgroundColor: colors.primaryLight,
-                                  marginLeft: 6,
-                                },
+                                { backgroundColor: colors.primaryLight },
                               ]}
                             >
                               <Text
@@ -213,7 +263,7 @@ export default function WalletsListScreen() {
                                   fontWeight: '700',
                                 }}
                               >
-                                DEFAULT
+                                ACTIVE
                               </Text>
                             </View>
                           )}
@@ -227,13 +277,12 @@ export default function WalletsListScreen() {
                             textTransform: 'capitalize',
                           }}
                         >
-                          {wallet.type.replace('_', ' ')} Account
-                          {wallet.lastReconciledAt ? ` • Verified` : ''}
+                          {wallet.type.replace('_', ' ')} Account • Status: Active
                         </Text>
                       </View>
                     </View>
 
-                    <View style={{ alignItems: 'flex-end' }}>
+                    <View style={{ alignItems: 'flex-end', marginLeft: 8 }}>
                       <Text
                         style={{
                           color: colors.text,
@@ -241,7 +290,7 @@ export default function WalletsListScreen() {
                           fontWeight: typography.weights.bold,
                         }}
                       >
-                        {format(wallet.currentBalance)}
+                        {format(currentBal)}
                       </Text>
                       <Text
                         style={{
@@ -255,57 +304,52 @@ export default function WalletsListScreen() {
                     </View>
                   </View>
 
-                  {(wallet.isPrimaryGPay || wallet.name.toLowerCase().includes('gpay')) && (
-                    <View
-                      style={{
-                        marginTop: spacing.md,
-                        paddingTop: spacing.sm,
-                        borderTopWidth: 1,
-                        borderTopColor: colors.border,
-                        flexDirection: 'row',
-                        alignItems: 'center',
-                        justifyContent: 'space-between',
-                      }}
-                    >
-                      <View style={{ flex: 1, marginRight: 8 }}>
-                        {wallet.lastReconciledAt ? (
-                          <Text
-                            style={{
-                              color: colors.textSecondary,
-                              fontSize: typography.sizes.xxs,
-                            }}
-                          >
-                            Verified {wallet.lastReconciledAt}
-                            {wallet.reconciliationDiff !== undefined && (
-                              <Text
-                                style={{
-                                  color:
-                                    wallet.reconciliationDiff === 0
-                                      ? colors.income
-                                      : colors.warning,
-                                  fontWeight: '700',
-                                }}
-                              >
-                                {` • Diff: ${format(wallet.reconciliationDiff)}`}
-                              </Text>
-                            )}
-                          </Text>
-                        ) : (
-                          <Text
-                            style={{
-                              color: colors.textTertiary,
-                              fontSize: typography.sizes.xxs,
-                            }}
-                          >
-                            Manual reconciliation available
-                          </Text>
-                        )}
-                      </View>
+                  {/* Account Action Buttons */}
+                  <View
+                    style={{
+                      marginTop: spacing.md,
+                      paddingTop: spacing.sm,
+                      borderTopWidth: 1,
+                      borderTopColor: colors.border,
+                      flexDirection: 'row',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      flexWrap: 'wrap',
+                      gap: 6,
+                    }}
+                  >
+                    <View style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap' }}>
+                      <TouchableOpacity
+                        activeOpacity={0.7}
+                        onPress={() => setSelectedWalletForHistory(wallet)}
+                        style={{
+                          paddingHorizontal: 10,
+                          paddingVertical: 5,
+                          borderRadius: radius.md,
+                          backgroundColor: colors.surfaceSecondary,
+                          borderWidth: 1,
+                          borderColor: colors.border,
+                          flexDirection: 'row',
+                          alignItems: 'center',
+                          gap: 4,
+                        }}
+                      >
+                        <History size={12} color={colors.textSecondary} />
+                        <Text
+                          style={{
+                            color: colors.textSecondary,
+                            fontSize: typography.sizes.xxs,
+                            fontWeight: '700',
+                          }}
+                        >
+                          History
+                        </Text>
+                      </TouchableOpacity>
 
-                      <View style={{ flexDirection: 'row', gap: 6 }}>
+                      {!isActive && (
                         <TouchableOpacity
                           activeOpacity={0.7}
-                          onPress={() => setShowSetBalanceModal(true)}
+                          onPress={() => handleSetActive(wallet)}
                           style={{
                             paddingHorizontal: 10,
                             paddingVertical: 5,
@@ -322,7 +366,60 @@ export default function WalletsListScreen() {
                               fontWeight: '700',
                             }}
                           >
-                            Set Balance
+                            Set Dashboard
+                          </Text>
+                        </TouchableOpacity>
+                      )}
+
+                      {!isDefault && (
+                        <TouchableOpacity
+                          activeOpacity={0.7}
+                          onPress={() => handleSetDefault(wallet)}
+                          style={{
+                            paddingHorizontal: 10,
+                            paddingVertical: 5,
+                            borderRadius: radius.md,
+                            backgroundColor: `${colors.lime}20`,
+                            borderWidth: 1,
+                            borderColor: colors.lime,
+                          }}
+                        >
+                          <Text
+                            style={{
+                              color: colors.lime,
+                              fontSize: typography.sizes.xxs,
+                              fontWeight: '700',
+                            }}
+                          >
+                            Make Default
+                          </Text>
+                        </TouchableOpacity>
+                      )}
+                    </View>
+
+                    {/* Optional Reconciliation for GPay */}
+                    {(wallet.isPrimaryGPay || wallet.name.toLowerCase().includes('gpay')) && (
+                      <View style={{ flexDirection: 'row', gap: 6 }}>
+                        <TouchableOpacity
+                          activeOpacity={0.7}
+                          onPress={() => setShowSetBalanceModal(true)}
+                          style={{
+                            paddingHorizontal: 8,
+                            paddingVertical: 5,
+                            borderRadius: radius.md,
+                            backgroundColor: colors.surfaceSecondary,
+                            borderWidth: 1,
+                            borderColor: colors.border,
+                          }}
+                        >
+                          <Text
+                            style={{
+                              color: colors.textTertiary,
+                              fontSize: typography.sizes.xxs,
+                              fontWeight: '600',
+                            }}
+                          >
+                            Set Bal
                           </Text>
                         </TouchableOpacity>
 
@@ -330,46 +427,141 @@ export default function WalletsListScreen() {
                           activeOpacity={0.7}
                           onPress={() => setShowReconcileModal(true)}
                           style={{
-                            paddingHorizontal: 10,
+                            paddingHorizontal: 8,
                             paddingVertical: 5,
                             borderRadius: radius.md,
-                            backgroundColor: colors.primary,
+                            backgroundColor: `${colors.primary}20`,
+                            borderWidth: 1,
+                            borderColor: colors.primary,
                           }}
                         >
                           <Text
                             style={{
-                              color: '#FFFFFF',
+                              color: colors.primary,
                               fontSize: typography.sizes.xxs,
-                              fontWeight: '700',
+                              fontWeight: '600',
                             }}
                           >
                             Reconcile
                           </Text>
                         </TouchableOpacity>
                       </View>
-                    </View>
-                  )}
+                    )}
+                  </View>
                 </Card>
               );
             })
           ) : (
             <EmptyState
               type="wallets"
-              title="No wallets created"
-              description="Add your Bank, GPay, or Cash wallets to begin tracking balances."
-              actionTitle="Create Wallet"
+              title="No accounts created"
+              description="Add Airtel Payments Bank, HDFC, SBI, GPay, or Cash in Hand to begin tracking balances."
+              actionTitle="Create Account"
               onActionPress={() => router.push('/wallets/add-wallet')}
             />
           )}
         </View>
       </ScrollView>
 
+      {/* Account Specific History & Details Modal */}
+      <Modal
+        visible={!!selectedWalletForHistory}
+        animationType="slide"
+        transparent
+        onRequestClose={() => setSelectedWalletForHistory(null)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalContent, { backgroundColor: colors.card, borderTopColor: colors.border }]}>
+            {selectedWalletForHistory && (
+              <>
+                <View style={styles.modalHeader}>
+                  <View>
+                    <Text style={{ color: colors.text, fontSize: typography.sizes.lg, fontWeight: '700' }}>
+                      {selectedWalletForHistory.name}
+                    </Text>
+                    <Text style={{ color: colors.textSecondary, fontSize: typography.sizes.xs, textTransform: 'capitalize' }}>
+                      {selectedWalletForHistory.type.replace('_', ' ')} Account • Opening: {format(selectedWalletForHistory.openingBalance)}
+                    </Text>
+                  </View>
+                  <TouchableOpacity
+                    onPress={() => setSelectedWalletForHistory(null)}
+                    style={[styles.closeBtn, { backgroundColor: colors.surfaceSecondary }]}
+                  >
+                    <X size={18} color={colors.text} />
+                  </TouchableOpacity>
+                </View>
+
+                {/* Account Balance Summary */}
+                <View
+                  style={[
+                    styles.accountBalanceBox,
+                    {
+                      backgroundColor: colors.surfaceSecondary,
+                      borderColor: colors.border,
+                      borderRadius: radius.lg,
+                      padding: spacing.md,
+                      marginVertical: spacing.md,
+                    },
+                  ]}
+                >
+                  <Text style={{ color: colors.textSecondary, fontSize: typography.sizes.xs }}>
+                    Current Calculated Balance
+                  </Text>
+                  <Text style={{ color: colors.lime, fontSize: typography.sizes['2xl'], fontWeight: '800', marginTop: 2 }}>
+                    {format(calculatedBalances[selectedWalletForHistory.id] ?? selectedWalletForHistory.currentBalance)}
+                  </Text>
+                </View>
+
+                {/* Transaction History Heading */}
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                  <Text style={{ color: colors.text, fontSize: typography.sizes.sm, fontWeight: '700' }}>
+                    Account Activity ({historyTransactions.length})
+                  </Text>
+                  <TouchableOpacity
+                    onPress={() => {
+                      setSelectedWalletForHistory(null);
+                      router.push('/wallets/transfer');
+                    }}
+                  >
+                    <Text style={{ color: colors.primary, fontSize: typography.sizes.xs, fontWeight: '600' }}>
+                      + Transfer Money
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+
+                {/* Account Transactions List */}
+                {historyTransactions.length > 0 ? (
+                  <FlatList
+                    data={historyTransactions}
+                    keyExtractor={(item) => item.id}
+                    showsVerticalScrollIndicator={false}
+                    renderItem={({ item }) => (
+                      <TransactionItem
+                        transaction={item}
+                        showDate
+                      />
+                    )}
+                    contentContainerStyle={{ paddingBottom: 24 }}
+                  />
+                ) : (
+                  <View style={{ paddingVertical: 32, alignItems: 'center' }}>
+                    <Text style={{ color: colors.textSecondary, fontSize: typography.sizes.sm }}>
+                      No transactions recorded for this account yet.
+                    </Text>
+                  </View>
+                )}
+              </>
+            )}
+          </View>
+        </View>
+      </Modal>
+
       {/* Reconcile GPay Modal */}
       {gpayWallet && (
         <ReconcileGPayModal
           visible={showReconcileModal}
           onClose={() => setShowReconcileModal(false)}
-          currentAppBalance={gpayWallet.currentBalance}
+          currentAppBalance={calculatedBalances[gpayWallet.id] ?? gpayWallet.currentBalance}
           walletId={gpayWallet.id}
         />
       )}
@@ -379,7 +571,7 @@ export default function WalletsListScreen() {
         <SetGPayBalanceModal
           visible={showSetBalanceModal}
           onClose={() => setShowSetBalanceModal(false)}
-          currentBalance={gpayWallet.currentBalance}
+          currentBalance={calculatedBalances[gpayWallet.id] ?? gpayWallet.currentBalance}
           walletId={gpayWallet.id}
         />
       )}
@@ -427,5 +619,32 @@ const styles = StyleSheet.create({
     paddingHorizontal: 6,
     paddingVertical: 2,
     borderRadius: 6,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.65)',
+    justifyContent: 'flex-end',
+  },
+  modalContent: {
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    borderTopWidth: 1,
+    padding: 20,
+    maxHeight: '80%',
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  closeBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  accountBalanceBox: {
+    borderWidth: 1,
   },
 });

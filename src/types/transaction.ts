@@ -26,9 +26,14 @@ export interface Transaction {
   categoryName: string;
   subcategory?: string;
   walletId: string;
+  accountId?: string;
   walletName?: string;
+  accountName?: string;
   targetWalletId?: string; // For transfers
+  targetAccountId?: string;
   targetWalletName?: string;
+  targetAccountName?: string;
+  transferId?: string;
   personId?: string; // For lending/borrowing
   personName?: string;
   date: string; // YYYY-MM-DD

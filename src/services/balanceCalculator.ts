@@ -99,22 +99,65 @@ export function calculateTransactionEffects(
 }
 
 /**
+ * Computes the exact balance of an account from its opening balance + all linked transactions.
+ * Prevents desyncs and double-counting:
+ * opening balance + (income + repayments received + incoming transfers) - (expenses + lending + repayments given + outgoing transfers)
+ */
+export function calculateAccountBalance(
+  wallet: Wallet,
+  transactions: Transaction[]
+): number {
+  let balance = Number(wallet.openingBalance) || 0;
+  const wId = wallet.id;
+
+  for (const tx of transactions) {
+    const isSource = tx.walletId === wId || tx.accountId === wId;
+    const isTarget = (tx.targetWalletId === wId || tx.targetAccountId === wId) && tx.type === 'transfer';
+
+    if (isSource) {
+      const amt = Number(tx.amount) || 0;
+      switch (tx.type) {
+        case 'expense':
+        case 'lend':
+        case 'repayment_given':
+        case 'transfer':
+          balance -= amt;
+          break;
+        case 'income':
+        case 'borrow':
+        case 'repayment_received':
+          balance += amt;
+          break;
+      }
+    } else if (isTarget) {
+      // Incoming transfer from another account
+      balance += Number(tx.amount) || 0;
+    }
+  }
+
+  return Number(balance.toFixed(2));
+}
+
+/**
+ * Computes exact balances for all wallets based on transactions history.
+ */
+export function calculateAllAccountBalances(
+  wallets: Wallet[],
+  transactions: Transaction[]
+): Record<string, number> {
+  const result: Record<string, number> = {};
+  for (const w of wallets) {
+    result[w.id] = calculateAccountBalance(w, transactions);
+  }
+  return result;
+}
+
+/**
  * Financial Summary Breakdown Structure
- *
- * DEFINITION OF FINANCIAL METRICS:
- * 1. GPay Balance: Balance held strictly in the primary Google Pay (UPI) wallet.
- * 2. Cash Balance: Physical cash in hand. Cash settlements never affect GPay!
- * 3. Savings Balance: Dedicated savings deposits/vaults. Moving money between GPay
- *    and Savings is recorded as a transfer (no double counting).
- * 4. Total Liquid Balance: Sum of GPay, Cash, and Bank accounts readily available for spending.
- * 5. Total Wallet Balance: Sum of all user wallets (Liquid + Savings).
- * 6. Total Receivable (Lent): Money given out to friends/colleagues that is owed back.
- *    Tracked as an asset. Repayments reduce this without counting as new income.
- * 7. Total Payable (Borrowed): Money borrowed that the user must repay.
- *    Tracked as a liability. Repayments reduce this without counting as new expense.
- * 8. Net Worth = Total Wallet Balance + Total Receivable - Total Payable.
  */
 export interface FinancialSummary {
+  activeWallet: Wallet | null;
+  activeBalance: number;
   gpayWallet: Wallet | null;
   gpayBalance: number;
   cashWallet: Wallet | null;
@@ -129,8 +172,18 @@ export interface FinancialSummary {
 
 export function calculateFinancialSummary(
   wallets: Wallet[],
-  people: Person[]
+  people: Person[],
+  transactions?: Transaction[],
+  activeWalletId?: string | null
 ): FinancialSummary {
+  // If transactions are provided, compute live exact balance per wallet; otherwise use currentBalance
+  const balancesMap = transactions
+    ? calculateAllAccountBalances(wallets, transactions)
+    : wallets.reduce((acc, w) => {
+        acc[w.id] = w.currentBalance || 0;
+        return acc;
+      }, {} as Record<string, number>);
+
   // Identify Primary GPay wallet
   const gpayWallet =
     wallets.find((w) => w.isPrimaryGPay) ||
@@ -142,21 +195,37 @@ export function calculateFinancialSummary(
 
   const cashWallet = wallets.find((w) => w.type === 'cash') || null;
 
-  const gpayBalance = gpayWallet ? (gpayWallet.currentBalance || 0) : 0;
-  const cashBalance = cashWallet ? (cashWallet.currentBalance || 0) : 0;
+  // Identify active wallet for dashboard display
+  let activeWallet: Wallet | null = null;
+  if (activeWalletId && activeWalletId !== 'all') {
+    activeWallet = wallets.find((w) => w.id === activeWalletId) || null;
+  }
+  if (!activeWallet) {
+    // Default to user's default wallet, or GPay, or first wallet
+    activeWallet = wallets.find((w) => w.isDefault) || gpayWallet || wallets[0] || null;
+  }
+
+  const gpayBalance = gpayWallet ? (balancesMap[gpayWallet.id] ?? gpayWallet.currentBalance ?? 0) : 0;
+  const cashBalance = cashWallet ? (balancesMap[cashWallet.id] ?? cashWallet.currentBalance ?? 0) : 0;
 
   const savingsBalance = wallets
     .filter((w) => w.type === 'savings')
-    .reduce((sum, w) => sum + (w.currentBalance || 0), 0);
+    .reduce((sum, w) => sum + (balancesMap[w.id] ?? w.currentBalance ?? 0), 0);
 
   const totalWalletBalance = wallets.reduce(
-    (sum, w) => sum + (w.currentBalance || 0),
+    (sum, w) => sum + (balancesMap[w.id] ?? w.currentBalance ?? 0),
     0
   );
 
   const totalLiquidBalance = wallets
     .filter((w) => w.type !== 'savings')
-    .reduce((sum, w) => sum + (w.currentBalance || 0), 0);
+    .reduce((sum, w) => sum + (balancesMap[w.id] ?? w.currentBalance ?? 0), 0);
+
+  const activeBalance = activeWalletId === 'all'
+    ? totalLiquidBalance
+    : activeWallet
+    ? (balancesMap[activeWallet.id] ?? activeWallet.currentBalance ?? 0)
+    : totalLiquidBalance;
 
   const totalReceivable = people.reduce(
     (sum, p) => sum + Math.max(0, p.remainingReceivable || 0),
@@ -171,6 +240,8 @@ export function calculateFinancialSummary(
   const netWorth = totalWalletBalance + totalReceivable - totalPayable;
 
   return {
+    activeWallet,
+    activeBalance,
     gpayWallet,
     gpayBalance,
     cashWallet,

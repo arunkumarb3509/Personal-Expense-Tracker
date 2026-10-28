@@ -131,16 +131,41 @@ export function TransactionItem({
   const title = transaction.description || transaction.categoryName || 'Transaction';
   const subtitleParts: string[] = [];
 
+  // 1. Category / Subcategory
   if (transaction.subcategory) {
     subtitleParts.push(transaction.subcategory);
   } else if (transaction.categoryName && transaction.categoryName !== title) {
     subtitleParts.push(transaction.categoryName);
   }
 
-  if (transaction.type === 'transfer' && transaction.targetWalletName) {
-    subtitleParts.push(`${transaction.walletName || 'Wallet'} → ${transaction.targetWalletName}`);
-  } else if (transaction.walletName) {
-    subtitleParts.push(transaction.walletName);
+  // 2. Account Name
+  const accountLabel = transaction.walletName || transaction.accountName || '';
+  if (transaction.type === 'transfer' && (transaction.targetWalletName || transaction.targetAccountName)) {
+    subtitleParts.push(`${accountLabel || 'Source'} → ${transaction.targetWalletName || transaction.targetAccountName}`);
+  } else if (accountLabel) {
+    subtitleParts.push(accountLabel);
+  }
+
+  // 3. Date formatting (Today / Yesterday / 19 Oct)
+  if (transaction.date) {
+    try {
+      const parsed = new Date(`${transaction.date}T12:00:00`);
+      const todayStr = new Date().toISOString().split('T')[0];
+      const yestDate = new Date();
+      yestDate.setDate(yestDate.getDate() - 1);
+      const yestStr = yestDate.toISOString().split('T')[0];
+
+      if (transaction.date === todayStr) {
+        subtitleParts.push('Today');
+      } else if (transaction.date === yestStr) {
+        subtitleParts.push('Yesterday');
+      } else {
+        const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+        subtitleParts.push(`${parsed.getDate()} ${monthNames[parsed.getMonth()]}`);
+      }
+    } catch {
+      subtitleParts.push(transaction.date);
+    }
   }
 
   if (transaction.personName) {
@@ -168,7 +193,9 @@ export function TransactionItem({
             styles.iconCircle,
             {
               backgroundColor: iconBgColor,
-              borderRadius: radius.lg,
+              borderRadius: radius.full,
+              width: 42,
+              height: 42,
             },
           ]}
         >
@@ -182,7 +209,7 @@ export function TransactionItem({
               {
                 color: colors.text,
                 fontSize: typography.sizes.sm,
-                fontWeight: typography.weights.semibold,
+                fontWeight: '700',
               },
             ]}
             numberOfLines={1}
@@ -205,21 +232,6 @@ export function TransactionItem({
                 {subtitleParts.join(' • ')}
               </Text>
             )}
-
-            {showDate && transaction.date && (
-              <Text
-                style={[
-                  styles.dateText,
-                  {
-                    color: colors.textTertiary,
-                    fontSize: typography.sizes.xs,
-                    marginLeft: subtitleParts.length > 0 ? 6 : 0,
-                  },
-                ]}
-              >
-                {subtitleParts.length > 0 ? `(${transaction.date})` : transaction.date}
-              </Text>
-            )}
           </View>
         </View>
       </View>
@@ -231,27 +243,26 @@ export function TransactionItem({
             {
               color: amountColor,
               fontSize: typography.sizes.md,
-              fontWeight: typography.weights.bold,
+              fontWeight: '800',
               letterSpacing: -0.2,
             },
           ]}
         >
-          {prefix} {format(transaction.amount)}
+          {prefix}{format(transaction.amount)}
         </Text>
-        {transaction.time && (
-          <Text
-            style={[
-              styles.timeText,
-              {
-                color: colors.textTertiary,
-                fontSize: typography.sizes.xxs,
-                marginTop: 2,
-              },
-            ]}
-          >
-            {transaction.time}
-          </Text>
-        )}
+        <Text
+          style={[
+            styles.timeText,
+            {
+              color: isPositive ? colors.income : colors.textTertiary,
+              fontSize: typography.sizes.xxs,
+              marginTop: 2,
+              fontWeight: isPositive ? '700' : '400',
+            },
+          ]}
+        >
+          {isPositive ? 'Credited' : transaction.time || ''}
+        </Text>
       </View>
     </TouchableOpacity>
   );

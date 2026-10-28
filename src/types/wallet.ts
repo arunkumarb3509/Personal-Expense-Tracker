@@ -13,6 +13,8 @@ export interface Wallet {
   accountNumberLast4?: string;
   isDefault?: boolean;
   isPrimaryGPay?: boolean;
+  status?: 'active' | 'archived';
+  linkedBankId?: string;
   lastReconciledAt?: number;
   reconciliationDiff?: number;
   lastVerifiedActualBalance?: number;

@@ -1,26 +1,37 @@
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import React, { useState, useMemo } from 'react';
+import {
+  View,
+  Text,
+  StyleSheet,
+  TouchableOpacity,
+  Modal,
+  TouchableWithoutFeedback,
+  ScrollView,
+} from 'react-native';
 import { useTheme } from '@/context/ThemeContext';
 import { useCurrency } from '@/hooks/useCurrency';
 import { useData } from '@/context/DataContext';
 import {
-  TrendingUp,
-  TrendingDown,
-  ChevronDown,
-  ChevronUp,
   Eye,
   EyeOff,
-  ShieldCheck,
   ArrowUpRight,
   ArrowDownLeft,
   ArrowLeftRight,
   RefreshCw,
-  PiggyBank,
-  Banknote,
+  ArrowDown,
+  ArrowUp,
   Smartphone,
-  SlidersHorizontal,
+  Building2,
+  Banknote,
+  CreditCard,
+  PiggyBank,
+  Wallet as WalletIcon,
+  CheckCircle2,
+  X,
+  Plus,
 } from 'lucide-react-native';
 import { format as formatDate } from 'date-fns';
+import { useRouter } from 'expo-router';
 import * as Haptics from 'expo-haptics';
 
 export interface BalanceCardProps {
@@ -37,128 +48,163 @@ export function BalanceCard({
   onAddIncome,
   onTransfer,
   onReconcile,
-  onSetStartingBalance,
-  onRecordSavings,
 }: BalanceCardProps) {
   const { colors, typography, radius, spacing, shadows } = useTheme();
   const {
-    gpayWallet,
-    gpayBalance,
-    cashBalance,
-    savingsBalance,
+    wallets,
+    transactions,
+    activeWalletId,
+    setActiveWalletId,
+    activeWallet,
+    activeBalance,
     totalLiquidBalance,
     totalWalletBalance,
-    totalReceivable,
-    totalPayable,
-    netWorth,
-    todayGPaySpend,
-    monthlyGPaySpend,
+    calculatedBalances,
   } = useData();
-  const { format } = useCurrency();
+  const { format, currencySymbol } = useCurrency();
+  const router = useRouter();
 
-  const [showBreakdown, setShowBreakdown] = useState(false);
   const [hideAmount, setHideAmount] = useState(false);
+  const [showAccountPicker, setShowAccountPicker] = useState(false);
 
   const toggleHide = () => {
-    try {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    } catch {}
+    try { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); } catch {}
     setHideAmount(!hideAmount);
   };
 
-  const toggleBreakdown = () => {
-    try {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    } catch {}
-    setShowBreakdown(!showBreakdown);
+  // Calculate This Month In & Out from actual transactions
+  const currentMonthPrefix = useMemo(() => formatDate(new Date(), 'yyyy-MM'), []);
+  const { thisMonthIn, thisMonthOut } = useMemo(() => {
+    let inAmount = 0;
+    let outAmount = 0;
+    for (const tx of transactions) {
+      if (tx.date && tx.date.startsWith(currentMonthPrefix)) {
+        if (tx.type === 'income' || tx.type === 'repayment_received') {
+          inAmount += tx.amount || 0;
+        } else if (tx.type === 'expense' || tx.type === 'lend') {
+          outAmount += tx.amount || 0;
+        }
+      }
+    }
+    return { thisMonthIn: inAmount, thisMonthOut: outAmount };
+  }, [transactions, currentMonthPrefix]);
+
+  // Determine current active account display
+  const isViewingTotal = !activeWalletId || activeWalletId === 'all';
+  const displayedBalance = isViewingTotal ? totalWalletBalance : activeBalance;
+  const badgeLabel = isViewingTotal
+    ? (wallets.length > 0 ? (activeWallet?.name || 'Primary GPay') : 'Total Balance')
+    : (activeWallet?.name || 'Selected Account');
+
+  const updatedTimeStr = useMemo(() => {
+    return `Today, ${formatDate(new Date(), 'h:mm a')}`;
+  }, []);
+
+  const getWalletIcon = (type: string, color: string, size = 18) => {
+    switch (type) {
+      case 'upi':
+        return <Smartphone size={size} color={color} />;
+      case 'bank':
+        return <Building2 size={size} color={color} />;
+      case 'cash':
+        return <Banknote size={size} color={color} />;
+      case 'credit_card':
+        return <CreditCard size={size} color={color} />;
+      case 'savings':
+        return <PiggyBank size={size} color={color} />;
+      default:
+        return <WalletIcon size={size} color={color} />;
+    }
   };
 
-  const lastReconciledStr = gpayWallet?.lastReconciledAt
-    ? formatDate(new Date(gpayWallet.lastReconciledAt), 'dd/MM/yyyy')
-    : formatDate(new Date(), 'dd/MM/yyyy');
-
-  const hasDiscrepancy =
-    gpayWallet?.reconciliationDiff !== undefined &&
-    Math.abs(gpayWallet.reconciliationDiff) > 0.01;
-
   return (
-    <View
-      style={[
-        styles.forestContainer,
-        {
-          backgroundColor: colors.forestCard,
-          borderRadius: radius['3xl'],
-        },
-        shadows.md,
-      ]}
-    >
-      {/* Top Header Row */}
-      <View style={styles.topRow}>
-        <View style={styles.labelBadgeRow}>
-          <Text style={[styles.walletLabel, { color: '#B3D4C4' }]}>
-            Wallet Balance
-          </Text>
-          <View style={[styles.limeBadge, { backgroundColor: colors.lime }]}>
-            <Text style={styles.limeBadgeText}>Primary GPay</Text>
+    <View style={styles.outerWrapper}>
+      {/* 1. Main Forest Card */}
+      <View
+        style={[
+          styles.forestContainer,
+          {
+            backgroundColor: '#11221A',
+            borderRadius: 24,
+            borderColor: '#193629',
+            borderWidth: 1,
+          },
+          shadows.md,
+        ]}
+      >
+        {/* Top Header Row */}
+        <View style={styles.topRow}>
+          <View style={styles.labelRow}>
+            <Text style={styles.walletLabel}>
+              {isViewingTotal ? 'Total Balance' : `${activeWallet?.name || 'Account'} Balance`}
+            </Text>
+            <TouchableOpacity
+              activeOpacity={0.7}
+              onPress={toggleHide}
+              style={styles.eyeBtn}
+            >
+              {hideAmount ? (
+                <EyeOff size={16} color="#8BAF9C" />
+              ) : (
+                <Eye size={16} color="#8BAF9C" />
+              )}
+            </TouchableOpacity>
           </View>
-        </View>
 
-        <View style={styles.headerRightActions}>
+          {/* Account Selector Pill Badge */}
           <TouchableOpacity
-            activeOpacity={0.7}
-            onPress={toggleHide}
-            style={styles.circleIconBtn}
+            activeOpacity={0.75}
+            onPress={() => setShowAccountPicker(true)}
+            style={styles.activeAccountBadge}
           >
-            {hideAmount ? (
-              <EyeOff size={18} color="#B3D4C4" />
-            ) : (
-              <Eye size={18} color="#B3D4C4" />
-            )}
+            <View style={styles.badgeGreenDot} />
+            <Text style={styles.activeAccountBadgeText} numberOfLines={1}>
+              {badgeLabel}
+            </Text>
           </TouchableOpacity>
         </View>
-      </View>
 
-      {/* Main Big Balance */}
-      <View style={{ marginTop: 6 }}>
-        <Text style={styles.mainBalance}>
-          {hideAmount ? '₹ ••••••' : format(gpayBalance)}
-        </Text>
-        <View style={styles.metaRow}>
-          <Text style={styles.updatedDateText}>
-            Updated: {lastReconciledStr}
+        {/* Main Big Balance */}
+        <View style={{ marginTop: 8 }}>
+          <Text style={styles.mainBalance}>
+            {hideAmount ? '₹ ••••••' : format(displayedBalance)}
           </Text>
-          {hasDiscrepancy && (
-            <TouchableOpacity
-              activeOpacity={0.8}
-              onPress={onReconcile}
-              style={[
-                styles.diffPill,
-                {
-                  backgroundColor:
-                    (gpayWallet?.reconciliationDiff || 0) > 0
-                      ? 'rgba(16, 185, 129, 0.25)'
-                      : 'rgba(239, 68, 68, 0.25)',
-                },
-              ]}
-            >
-              <Text
-                style={{
-                  color:
-                    (gpayWallet?.reconciliationDiff || 0) > 0 ? '#34D399' : '#FCA5A5',
-                  fontSize: 10,
-                  fontWeight: '700',
-                }}
-              >
-                Diff:{' '}
-                {(gpayWallet?.reconciliationDiff || 0) > 0 ? '+' : ''}
-                {format(gpayWallet?.reconciliationDiff || 0)}
+          <Text style={styles.updatedDateText}>
+            Updated: {updatedTimeStr}
+          </Text>
+        </View>
+
+        {/* Two Sub-Cards: This Month In & This Month Out */}
+        <View style={styles.monthStatsRow}>
+          {/* This Month In */}
+          <View style={styles.monthStatCard}>
+            <View style={[styles.arrowCircle, { backgroundColor: '#143828' }]}>
+              <ArrowDown size={14} color="#34D399" strokeWidth={2.5} />
+            </View>
+            <View style={{ marginLeft: 10 }}>
+              <Text style={styles.monthStatLabel}>This Month In</Text>
+              <Text style={[styles.monthStatValue, { color: '#34D399' }]}>
+                {hideAmount ? '••••' : `+${format(thisMonthIn)}`}
               </Text>
-            </TouchableOpacity>
-          )}
+            </View>
+          </View>
+
+          {/* This Month Out */}
+          <View style={styles.monthStatCard}>
+            <View style={[styles.arrowCircle, { backgroundColor: '#381C1C' }]}>
+              <ArrowUp size={14} color="#F87171" strokeWidth={2.5} />
+            </View>
+            <View style={{ marginLeft: 10 }}>
+              <Text style={styles.monthStatLabel}>This Month Out</Text>
+              <Text style={[styles.monthStatValue, { color: '#F87171' }]}>
+                {hideAmount ? '••••' : `-${format(thisMonthOut)}`}
+              </Text>
+            </View>
+          </View>
         </View>
       </View>
 
-      {/* Quick Action Buttons Row (Send / Receive / Top-Up / Reconcile) */}
+      {/* 2. Quick Action Buttons Row (Send / Receive / Top-Up / Reconcile) */}
       <View style={styles.actionsRow}>
         <TouchableOpacity
           activeOpacity={0.8}
@@ -166,7 +212,7 @@ export function BalanceCard({
           style={styles.actionItem}
         >
           <View style={styles.actionCircle}>
-            <ArrowUpRight size={20} color="#FFFFFF" strokeWidth={2.2} />
+            <ArrowUpRight size={22} color="#FFFFFF" strokeWidth={2.2} />
           </View>
           <Text style={styles.actionText}>Send</Text>
         </TouchableOpacity>
@@ -177,7 +223,7 @@ export function BalanceCard({
           style={styles.actionItem}
         >
           <View style={styles.actionCircle}>
-            <ArrowDownLeft size={20} color="#FFFFFF" strokeWidth={2.2} />
+            <ArrowDownLeft size={22} color="#FFFFFF" strokeWidth={2.2} />
           </View>
           <Text style={styles.actionText}>Receive</Text>
         </TouchableOpacity>
@@ -188,7 +234,7 @@ export function BalanceCard({
           style={styles.actionItem}
         >
           <View style={styles.actionCircle}>
-            <ArrowLeftRight size={20} color="#FFFFFF" strokeWidth={2.2} />
+            <ArrowLeftRight size={22} color="#FFFFFF" strokeWidth={2.2} />
           </View>
           <Text style={styles.actionText}>Top-Up</Text>
         </TouchableOpacity>
@@ -198,309 +244,320 @@ export function BalanceCard({
           onPress={onReconcile}
           style={styles.actionItem}
         >
-          <View style={[styles.actionCircle, { borderColor: colors.lime, borderWidth: 1 }]}>
-            <RefreshCw size={19} color={colors.lime} strokeWidth={2.2} />
+          <View style={[styles.actionCircle, styles.actionCircleHighlight]}>
+            <RefreshCw size={21} color="#0B291F" strokeWidth={2.4} />
           </View>
-          <Text style={[styles.actionText, { color: colors.lime }]}>Reconcile</Text>
+          <Text style={[styles.actionText, { color: '#B4F06A', fontWeight: '700' }]}>
+            Reconcile
+          </Text>
         </TouchableOpacity>
       </View>
 
-      {/* Today & This Month GPay Spend Strip */}
-      <View style={styles.spendStrip}>
-        <View style={styles.spendStripCol}>
-          <Text style={styles.spendLabel}>Today's GPay Spend</Text>
-          <Text style={styles.spendVal}>
-            {hideAmount ? '••••' : format(todayGPaySpend)}
-          </Text>
-        </View>
-
-        <View style={styles.spendDivider} />
-
-        <View style={styles.spendStripCol}>
-          <Text style={styles.spendLabel}>This Month's GPay Spend</Text>
-          <Text style={styles.spendVal}>
-            {hideAmount ? '••••' : format(monthlyGPaySpend)}
-          </Text>
-        </View>
-      </View>
-
-      {/* Expandable Financial Overview Toggle */}
-      <TouchableOpacity
-        activeOpacity={0.7}
-        onPress={toggleBreakdown}
-        style={styles.breakdownHeader}
+      {/* Account Picker Modal */}
+      <Modal
+        visible={showAccountPicker}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowAccountPicker(false)}
       >
-        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-          <ShieldCheck size={14} color="#B3D4C4" style={{ marginRight: 6 }} />
-          <Text style={styles.breakdownTitle}>
-            {showBreakdown ? 'Hide Cash, Savings & Dues' : 'Cash, Savings & Total Net Worth'}
-          </Text>
-        </View>
-        {showBreakdown ? (
-          <ChevronUp size={16} color="#B3D4C4" />
-        ) : (
-          <ChevronDown size={16} color="#B3D4C4" />
-        )}
-      </TouchableOpacity>
+        <TouchableWithoutFeedback onPress={() => setShowAccountPicker(false)}>
+          <View style={styles.modalOverlay}>
+            <TouchableWithoutFeedback>
+              <View style={styles.sheetCard}>
+                <View style={styles.sheetHeader}>
+                  <Text style={styles.sheetTitle}>Choose Active Account</Text>
+                  <TouchableOpacity onPress={() => setShowAccountPicker(false)} style={{ padding: 4 }}>
+                    <X size={18} color="#8BA699" />
+                  </TouchableOpacity>
+                </View>
 
-      {/* Expanded Breakdown Rows */}
-      {showBreakdown && (
-        <View style={styles.breakdownContainer}>
-          {/* Cash Balance */}
-          <View style={styles.breakdownRow}>
-            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-              <Banknote size={15} color="#10B981" style={{ marginRight: 6 }} />
-              <Text style={styles.breakdownLabel}>Separate Cash in Hand</Text>
-            </View>
-            <Text style={styles.breakdownValue}>
-              {hideAmount ? '••••' : format(cashBalance)}
-            </Text>
+                {/* Option for Combined All Accounts */}
+                <TouchableOpacity
+                  activeOpacity={0.7}
+                  onPress={() => {
+                    try { Haptics.selectionAsync(); } catch {}
+                    setActiveWalletId('all');
+                    setShowAccountPicker(false);
+                  }}
+                  style={[
+                    styles.accountOptionRow,
+                    isViewingTotal && styles.accountOptionRowSelected,
+                  ]}
+                >
+                  <View style={[styles.optionIconCircle, { backgroundColor: '#133527' }]}>
+                    <WalletIcon size={20} color="#34D399" />
+                  </View>
+                  <View style={{ flex: 1, marginLeft: 12 }}>
+                    <Text style={styles.optionName}>All Accounts (Total)</Text>
+                    <Text style={styles.optionBalance}>
+                      Total Balance: {format(totalWalletBalance)}
+                    </Text>
+                  </View>
+                  {isViewingTotal && <CheckCircle2 size={18} color="#B4F06A" />}
+                </TouchableOpacity>
+
+                <ScrollView style={{ maxHeight: 260 }}>
+                  {wallets.map((w) => {
+                    const isSelected = activeWalletId === w.id;
+                    const bal = calculatedBalances[w.id] ?? w.currentBalance ?? 0;
+                    return (
+                      <TouchableOpacity
+                        key={w.id}
+                        activeOpacity={0.7}
+                        onPress={() => {
+                          try { Haptics.selectionAsync(); } catch {}
+                          setActiveWalletId(w.id);
+                          setShowAccountPicker(false);
+                        }}
+                        style={[
+                          styles.accountOptionRow,
+                          isSelected && styles.accountOptionRowSelected,
+                        ]}
+                      >
+                        <View style={[styles.optionIconCircle, { backgroundColor: `${w.color || '#34D399'}22` }]}>
+                          {getWalletIcon(w.type, w.color || '#34D399', 20)}
+                        </View>
+                        <View style={{ flex: 1, marginLeft: 12 }}>
+                          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                            <Text style={styles.optionName}>{w.name}</Text>
+                            {w.isDefault && (
+                              <View style={styles.defaultPill}>
+                                <Text style={styles.defaultPillText}>DEFAULT</Text>
+                              </View>
+                            )}
+                          </View>
+                          <Text style={styles.optionBalance}>
+                            Balance: {format(bal)}
+                          </Text>
+                        </View>
+                        {isSelected && <CheckCircle2 size={18} color="#B4F06A" />}
+                      </TouchableOpacity>
+                    );
+                  })}
+                </ScrollView>
+
+                <TouchableOpacity
+                  activeOpacity={0.7}
+                  onPress={() => {
+                    setShowAccountPicker(false);
+                    router.push('/wallets/add-wallet');
+                  }}
+                  style={styles.addAccountLink}
+                >
+                  <Plus size={16} color="#B4F06A" style={{ marginRight: 6 }} />
+                  <Text style={styles.addAccountLinkText}>Add New Account / Bank</Text>
+                </TouchableOpacity>
+              </View>
+            </TouchableWithoutFeedback>
           </View>
-
-          {/* Savings Balance */}
-          <View style={styles.breakdownRow}>
-            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-              <PiggyBank size={15} color="#F59E0B" style={{ marginRight: 6 }} />
-              <Text style={styles.breakdownLabel}>Savings Vault</Text>
-            </View>
-            <TouchableOpacity onPress={onRecordSavings} activeOpacity={0.7}>
-              <Text style={[styles.breakdownValue, { color: '#FCD34D' }]}>
-                {hideAmount ? '••••' : format(savingsBalance)}
-              </Text>
-            </TouchableOpacity>
-          </View>
-
-          {/* Receivables */}
-          <View style={styles.breakdownRow}>
-            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-              <View style={[styles.statusDot, { backgroundColor: colors.lend }]} />
-              <Text style={styles.breakdownLabel}>Money Given (To Receive)</Text>
-            </View>
-            <Text style={[styles.breakdownValue, { color: '#FBBF24' }]}>
-              +{hideAmount ? '••••' : format(totalReceivable)}
-            </Text>
-          </View>
-
-          {/* Payables */}
-          <View style={styles.breakdownRow}>
-            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-              <View style={[styles.statusDot, { backgroundColor: colors.borrow }]} />
-              <Text style={styles.breakdownLabel}>Money Borrowed (To Pay)</Text>
-            </View>
-            <Text style={[styles.breakdownValue, { color: '#2DD4BF' }]}>
-              -{hideAmount ? '••••' : format(totalPayable)}
-            </Text>
-          </View>
-
-          <View style={styles.breakdownDivider} />
-
-          {/* Net Worth */}
-          <View style={styles.breakdownRow}>
-            <Text style={[styles.breakdownLabel, { fontWeight: '700', color: '#FFFFFF' }]}>
-              Calculated Net Worth
-            </Text>
-            <Text style={[styles.breakdownValue, { color: colors.lime, fontWeight: '800' }]}>
-              {hideAmount ? '••••••' : format(netWorth)}
-            </Text>
-          </View>
-
-          {/* Setup / Reconcile links */}
-          <View style={styles.helperActions}>
-            <TouchableOpacity onPress={onSetStartingBalance} style={styles.helperLink}>
-              <Text style={styles.helperLinkText}>Set Starting GPay</Text>
-            </TouchableOpacity>
-            <Text style={{ color: '#527766' }}>•</Text>
-            <TouchableOpacity onPress={onRecordSavings} style={styles.helperLink}>
-              <Text style={styles.helperLinkText}>Add Savings</Text>
-            </TouchableOpacity>
-            <Text style={{ color: '#527766' }}>•</Text>
-            <TouchableOpacity onPress={onReconcile} style={styles.helperLink}>
-              <Text style={styles.helperLinkText}>Verify GPay</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      )}
+        </TouchableWithoutFeedback>
+      </Modal>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
+  outerWrapper: {
+    marginVertical: 4,
+  },
   forestContainer: {
-    padding: 22,
-    marginVertical: 6,
+    padding: 20,
   },
   topRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
   },
-  labelBadgeRow: {
+  labelRow: {
     flexDirection: 'row',
     alignItems: 'center',
   },
   walletLabel: {
+    color: '#8BAF9C',
     fontSize: 13,
-    fontWeight: '500',
-    letterSpacing: -0.1,
+    fontWeight: '600',
   },
-  limeBadge: {
+  eyeBtn: {
     marginLeft: 8,
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 12,
+    padding: 2,
   },
-  limeBadgeText: {
-    color: '#0B291F',
-    fontSize: 10,
-    fontWeight: '800',
-    letterSpacing: 0.2,
-  },
-  headerRightActions: {
+  activeAccountBadge: {
     flexDirection: 'row',
     alignItems: 'center',
+    backgroundColor: '#163124',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: '#214734',
+    maxWidth: 160,
   },
-  circleIconBtn: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: 'rgba(255, 255, 255, 0.08)',
-    alignItems: 'center',
-    justifyContent: 'center',
+  badgeGreenDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: '#B4F06A',
+    marginRight: 6,
+  },
+  activeAccountBadgeText: {
+    color: '#B4F06A',
+    fontSize: 11,
+    fontWeight: '800',
   },
   mainBalance: {
     color: '#FFFFFF',
-    fontSize: 34,
+    fontSize: 36,
     fontWeight: '800',
     letterSpacing: -0.6,
-  },
-  metaRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginTop: 4,
   },
   updatedDateText: {
     color: '#8BAF9C',
     fontSize: 11,
     fontWeight: '500',
+    marginTop: 2,
   },
-  diffPill: {
-    marginLeft: 8,
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 6,
+  monthStatsRow: {
+    flexDirection: 'row',
+    gap: 10,
+    marginTop: 18,
+  },
+  monthStatCard: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#0D1A14',
+    borderRadius: 16,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderWidth: 1,
+    borderColor: '#172C21',
+  },
+  arrowCircle: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  monthStatLabel: {
+    color: '#8BAF9C',
+    fontSize: 10,
+    fontWeight: '600',
+  },
+  monthStatValue: {
+    fontSize: 14,
+    fontWeight: '800',
+    marginTop: 1,
   },
   actionsRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginTop: 20,
-    paddingTop: 16,
-    borderTopWidth: 1,
-    borderTopColor: 'rgba(255, 255, 255, 0.08)',
+    marginTop: 18,
+    paddingHorizontal: 6,
   },
   actionItem: {
     alignItems: 'center',
     flex: 1,
   },
   actionCircle: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    backgroundColor: '#162820',
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 6,
+    borderWidth: 1,
+    borderColor: '#1D3B2E',
+  },
+  actionCircleHighlight: {
+    backgroundColor: '#B4F06A',
+    borderColor: '#B4F06A',
   },
   actionText: {
     color: '#E0EDE6',
     fontSize: 12,
     fontWeight: '600',
   },
-  spendStrip: {
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.75)',
+    justifyContent: 'center',
+    padding: 20,
+  },
+  sheetCard: {
+    backgroundColor: '#0F221A',
+    borderRadius: 24,
+    padding: 20,
+    borderWidth: 1,
+    borderColor: '#1B3B2E',
+  },
+  sheetHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(0, 0, 0, 0.2)',
-    borderRadius: 16,
-    paddingVertical: 10,
-    paddingHorizontal: 14,
-    marginTop: 18,
+    justifyContent: 'space-between',
+    marginBottom: 14,
   },
-  spendStripCol: {
-    flex: 1,
-  },
-  spendLabel: {
-    color: '#8BAF9C',
-    fontSize: 10,
-    fontWeight: '500',
-  },
-  spendVal: {
+  sheetTitle: {
     color: '#FFFFFF',
-    fontSize: 13,
+    fontSize: 16,
+    fontWeight: '800',
+  },
+  accountOptionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+    borderRadius: 16,
+    backgroundColor: '#13281F',
+    borderWidth: 1,
+    borderColor: '#193629',
+    marginBottom: 8,
+  },
+  accountOptionRowSelected: {
+    borderColor: '#B4F06A',
+    backgroundColor: '#163327',
+  },
+  optionIconCircle: {
+    width: 38,
+    height: 38,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  optionName: {
+    color: '#FFFFFF',
+    fontSize: 14,
     fontWeight: '700',
+  },
+  optionBalance: {
+    color: '#8BAF9C',
+    fontSize: 11,
     marginTop: 2,
   },
-  spendDivider: {
-    width: 1,
-    height: 24,
-    backgroundColor: 'rgba(255, 255, 255, 0.12)',
-    marginHorizontal: 12,
+  defaultPill: {
+    backgroundColor: '#B4F06A',
+    paddingHorizontal: 5,
+    paddingVertical: 1,
+    borderRadius: 4,
+    marginLeft: 6,
   },
-  breakdownHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginTop: 14,
-    paddingTop: 10,
-    borderTopWidth: 1,
-    borderTopColor: 'rgba(255, 255, 255, 0.08)',
+  defaultPillText: {
+    color: '#0B291F',
+    fontSize: 9,
+    fontWeight: '800',
   },
-  breakdownTitle: {
-    color: '#B3D4C4',
-    fontSize: 11,
-    fontWeight: '600',
-  },
-  breakdownContainer: {
-    marginTop: 10,
-    gap: 8,
-  },
-  breakdownRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  breakdownLabel: {
-    color: '#A0C2B0',
-    fontSize: 12,
-  },
-  breakdownValue: {
-    color: '#FFFFFF',
-    fontSize: 12,
-    fontWeight: '700',
-  },
-  statusDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    marginRight: 6,
-  },
-  breakdownDivider: {
-    height: 1,
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
-    marginVertical: 4,
-  },
-  helperActions: {
+  addAccountLink: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 8,
-    marginTop: 8,
-    paddingTop: 6,
+    marginTop: 10,
+    paddingVertical: 6,
   },
-  helperLink: {},
-  helperLinkText: {
+  addAccountLinkText: {
     color: '#B4F06A',
-    fontSize: 11,
-    fontWeight: '600',
-    textDecorationLine: 'underline',
+    fontSize: 13,
+    fontWeight: '700',
   },
 });

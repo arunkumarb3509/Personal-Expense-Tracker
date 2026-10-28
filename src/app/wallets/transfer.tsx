@@ -25,7 +25,7 @@ import * as Haptics from 'expo-haptics';
 
 export default function TransferFundsModal() {
   const { colors, typography, radius, spacing } = useTheme();
-  const { wallets, transfer } = useData();
+  const { wallets, transfer, calculatedBalances } = useData();
   const { currencySymbol, format: formatMoney } = useCurrency();
   const { showToast } = useToast();
   const router = useRouter();
@@ -47,6 +47,9 @@ export default function TransferFundsModal() {
   const fromWallet = wallets.find((w) => w.id === fromWalletId);
   const toWallet = wallets.find((w) => w.id === toWalletId);
 
+  const fromBalance = calculatedBalances[fromWalletId] ?? fromWallet?.currentBalance ?? 0;
+  const toBalance = calculatedBalances[toWalletId] ?? toWallet?.currentBalance ?? 0;
+
   const handleSwap = () => {
     try {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -59,14 +62,24 @@ export default function TransferFundsModal() {
   const handleTransfer = async () => {
     setAmountError('');
 
+    if (!fromWalletId || !toWalletId) {
+      showToast('Please select both source and destination accounts.', 'warning');
+      return;
+    }
+
     if (fromWalletId === toWalletId) {
-      showToast('Source and destination wallets cannot be the same.', 'warning');
+      showToast('Source and destination accounts cannot be the same.', 'warning');
       return;
     }
 
     const numericAmount = parseFloat(amount);
     if (isNaN(numericAmount) || numericAmount <= 0) {
       setAmountError('Please enter a valid transfer amount.');
+      return;
+    }
+
+    if (numericAmount > fromBalance) {
+      setAmountError(`Transfer amount exceeds available balance (${formatMoney(fromBalance)})`);
       return;
     }
 
@@ -77,7 +90,7 @@ export default function TransferFundsModal() {
         toWalletId,
         numericAmount,
         date,
-        description.trim() || `Transfer from ${fromWallet?.name} to ${toWallet?.name}`,
+        description.trim() || `Self transfer from ${fromWallet?.name} to ${toWallet?.name}`,
         notes.trim()
       );
 
@@ -86,7 +99,7 @@ export default function TransferFundsModal() {
       } catch {}
 
       showToast(
-        `Transfer of ${formatMoney(numericAmount)} from ${fromWallet?.name} to ${toWallet?.name} completed!`,
+        `Successfully transferred ${formatMoney(numericAmount)} to ${toWallet?.name}!`,
         'success'
       );
 
@@ -100,7 +113,7 @@ export default function TransferFundsModal() {
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
-      <Header title="Transfer Between Wallets" showBack onBackPress={() => router.back()} />
+      <Header title="Bank Self-Transfer" showBack onBackPress={() => router.back()} />
 
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
@@ -121,6 +134,7 @@ export default function TransferFundsModal() {
               }}
               currencySymbol={currencySymbol}
               error={amountError}
+              placeholder="0"
             />
           </View>
 
@@ -139,12 +153,18 @@ export default function TransferFundsModal() {
                 },
               ]}
             >
-              <Text style={{ color: colors.textSecondary, fontSize: typography.sizes.xs, fontWeight: '600' }}>
-                FROM WALLET (SOURCE)
-              </Text>
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                <Text style={{ color: colors.textSecondary, fontSize: typography.sizes.xs, fontWeight: '600' }}>
+                  FROM ACCOUNT (SOURCE)
+                </Text>
+                <Text style={{ color: colors.primary, fontSize: typography.sizes.xs, fontWeight: '700' }}>
+                  Avail: {formatMoney(fromBalance)}
+                </Text>
+              </View>
               <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginTop: 8 }}>
                 {wallets.map((w) => {
                   const isSelected = w.id === fromWalletId;
+                  const bal = calculatedBalances[w.id] ?? w.currentBalance;
                   return (
                     <TouchableOpacity
                       key={w.id}
@@ -170,7 +190,7 @@ export default function TransferFundsModal() {
                           fontWeight: isSelected ? '700' : '500',
                         }}
                       >
-                        {w.name} ({formatMoney(w.currentBalance)})
+                        {w.name} ({formatMoney(bal)})
                       </Text>
                     </TouchableOpacity>
                   );
@@ -209,12 +229,18 @@ export default function TransferFundsModal() {
                 },
               ]}
             >
-              <Text style={{ color: colors.textSecondary, fontSize: typography.sizes.xs, fontWeight: '600' }}>
-                TO WALLET (DESTINATION)
-              </Text>
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                <Text style={{ color: colors.textSecondary, fontSize: typography.sizes.xs, fontWeight: '600' }}>
+                  TO ACCOUNT (DESTINATION)
+                </Text>
+                <Text style={{ color: colors.income, fontSize: typography.sizes.xs, fontWeight: '700' }}>
+                  Current: {formatMoney(toBalance)}
+                </Text>
+              </View>
               <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginTop: 8 }}>
                 {wallets.map((w) => {
                   const isSelected = w.id === toWalletId;
+                  const bal = calculatedBalances[w.id] ?? w.currentBalance;
                   return (
                     <TouchableOpacity
                       key={w.id}
@@ -240,7 +266,7 @@ export default function TransferFundsModal() {
                           fontWeight: isSelected ? '700' : '500',
                         }}
                       >
-                        {w.name} ({formatMoney(w.currentBalance)})
+                        {w.name} ({formatMoney(bal)})
                       </Text>
                     </TouchableOpacity>
                   );

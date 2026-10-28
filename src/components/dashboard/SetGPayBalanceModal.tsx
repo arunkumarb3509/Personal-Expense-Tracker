@@ -21,9 +21,16 @@ import * as Haptics from 'expo-haptics';
 export interface SetGPayBalanceModalProps {
   visible: boolean;
   onClose: () => void;
+  currentBalance?: number;
+  walletId?: string;
 }
 
-export function SetGPayBalanceModal({ visible, onClose }: SetGPayBalanceModalProps) {
+export function SetGPayBalanceModal({
+  visible,
+  onClose,
+  currentBalance,
+  walletId,
+}: SetGPayBalanceModalProps) {
   const { colors, typography, radius, spacing } = useTheme();
   const { gpayWallet, setStartingGPayBalance } = useData();
   const { format, currencySymbol } = useCurrency();

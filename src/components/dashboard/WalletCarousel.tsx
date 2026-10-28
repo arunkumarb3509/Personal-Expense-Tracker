@@ -8,8 +8,10 @@ import {
 } from 'react-native';
 import { useTheme } from '@/context/ThemeContext';
 import { useCurrency } from '@/hooks/useCurrency';
+import { useData } from '@/context/DataContext';
 import { Wallet } from '@/types/wallet';
 import { useRouter } from 'expo-router';
+import * as Haptics from 'expo-haptics';
 import {
   Smartphone,
   Building2,
@@ -27,6 +29,7 @@ export interface WalletCarouselProps {
 export function WalletCarousel({ wallets }: WalletCarouselProps) {
   const { colors, typography, radius, spacing, shadows } = useTheme();
   const { format } = useCurrency();
+  const { calculatedBalances, activeWalletId, setActiveWalletId } = useData();
   const router = useRouter();
 
   const getWalletIcon = (type: string, color: string) => {
@@ -84,19 +87,26 @@ export function WalletCarousel({ wallets }: WalletCarouselProps) {
       >
         {wallets.map((wallet) => {
           const wColor = wallet.color || colors.primary;
+          const bal = calculatedBalances[wallet.id] ?? wallet.currentBalance ?? 0;
+          const isSelected = activeWalletId === wallet.id;
+
           return (
             <TouchableOpacity
               key={wallet.id}
               activeOpacity={0.8}
-              onPress={() => router.push('/wallets')}
+              onPress={() => {
+                try { Haptics.selectionAsync(); } catch {}
+                setActiveWalletId(wallet.id);
+              }}
               style={[
                 styles.walletCard,
                 {
-                  backgroundColor: colors.card,
-                  borderColor: colors.border,
+                  backgroundColor: isSelected ? '#152C22' : colors.card,
+                  borderColor: isSelected ? '#34D399' : colors.border,
                   borderRadius: radius.xl,
                   padding: spacing.md,
                   marginRight: spacing.md,
+                  borderWidth: isSelected ? 1.5 : 1,
                 },
                 shadows.sm,
               ]}
@@ -180,7 +190,7 @@ export function WalletCarousel({ wallets }: WalletCarouselProps) {
                   },
                 ]}
               >
-                {format(wallet.currentBalance)}
+                {format(bal)}
               </Text>
             </TouchableOpacity>
           );

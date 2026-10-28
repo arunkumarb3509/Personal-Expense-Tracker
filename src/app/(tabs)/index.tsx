@@ -173,26 +173,21 @@ export default function HomeDashboardScreen() {
           </View>
         </View>
 
-        {/* Primary GPay Wallet Balance Card */}
+        {/* Primary Wallet Balance Card */}
         <View style={{ paddingHorizontal: spacing.lg }}>
           <BalanceCard
             onAddExpense={() => router.push('/add-transaction?type=expense')}
             onAddIncome={() => router.push('/add-transaction?type=income')}
-            onTransfer={() => router.push('/wallets/transfer')}
-            onReconcile={() => setShowReconcileModal(true)}
-            onSetStartingBalance={() => setShowStartingBalanceModal(true)}
-            onRecordSavings={() => setShowSavingsModal(true)}
+            onTransfer={() => router.push('/add-transaction?type=transfer')}
+            onReconcile={() => router.push('/wallets')}
           />
         </View>
 
-        {/* Quick Transfer & Personal Settlements Bar */}
-        <QuickSettlementsRow />
-
-        {/* Feature Shortcuts (Cash & Dues, Savings, Daily, Budgets, Wallets) */}
-        <QuickActions onRecordSavings={() => setShowSavingsModal(true)} />
-
         {/* Wallets & Accounts Carousel */}
         <WalletCarousel wallets={wallets} />
+
+        {/* Quick Transfer & Personal Settlements Bar */}
+        <QuickSettlementsRow />
 
         {/* Smart Financial Insights (if available) */}
         {insights.length > 0 && (
@@ -225,7 +220,10 @@ export default function HomeDashboardScreen() {
           </View>
         )}
 
-        {/* Manage Expenses (Recent Transactions) */}
+        {/* Feature Shortcuts (Cash & Dues, Savings, Daily, Budgets, Wallets) */}
+        <QuickActions onRecordSavings={() => setShowSavingsModal(true)} />
+
+        {/* Recent Activity */}
         <View style={{ marginTop: spacing.sm, paddingBottom: spacing['4xl'] }}>
           <View
             style={[
@@ -243,7 +241,7 @@ export default function HomeDashboardScreen() {
                 },
               ]}
             >
-              Manage Expenses
+              Recent Activity
             </Text>
             <TouchableOpacity
               activeOpacity={0.7}

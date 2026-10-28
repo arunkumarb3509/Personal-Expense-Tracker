@@ -17,7 +17,7 @@ function RootLayoutContent() {
     if (isLoading) return;
 
     const inAuthGroup = segments[0] === '(auth)';
-    const currentScreen = segments[1];
+    const currentScreen = (segments as string[])[1];
 
     if (!isAuthenticated) {
       // User is not signed in, ensure they stay within (auth) screens
